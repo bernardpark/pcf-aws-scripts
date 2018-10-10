@@ -23,6 +23,11 @@ declare -a BUCKETS=("bpark-pcf-ops-manager-bucket" "bpark-pcf-buildpacks-bucket"
 # IAM
 IAM_USER="pcf-user"
 IAM_USER_POLICY="pcf-iam-policy"
+IAM_USER_JSON="pcf-user.json"
+IAM_USER_KEYS_JSON="pcf-user-keys.json"
+
+IAM_ROLE="pcf-role"
+IAM_ROLE_POLICY="pcf-iam-role-trust-policy"
 
 # VPC, Initial Subnets, Internet Gateway, Route Tables, Elastic IP, NAT
 VPC="pcf-vpc"
@@ -47,9 +52,6 @@ RT_IGW_DEST_CIDR="0.0.0.0/0"
 RT_MAIN="rt_main"
 RT_MAIN_ID=""
 RT_MAIN_DEST_CIDR="0.0.0.0/0"
-
-EIP_ALLOC="eipalloc_nat"
-EIP_ALLOC_ID=""
 
 # Additional Subnets
 ERT_SN_AZ0="pcf-ert-subnet-az0"
@@ -111,11 +113,14 @@ PCFVM_SG_DESC="Security Group for PCF VMs"
 
 # EC2
 KEY_OPS_MAN="pcf-ops-manager-key"
-NAT_INSTANCE="nat-instance"
-NAT_INSTANCE_ID=""
+
+NAT_INSTANCE="pcf-nat"
 NAT_INSTANCE_TYPE="t2.medium"
 NAT_AMI="ami-bd6f59d8"
-ENI_ID=""
+
+OPSMAN_INSTANCE="pcf-ops-manager"
+OPSMAN_INSTANCE_TYPE="m3.large"
+OPSMAN_AMI="ami-0af8611563c4da56c"
 
 #==============================================================================
 #   Functions below. Do not modify.
@@ -157,20 +162,8 @@ iam_cleanup()
   then
     echo "Successfully deleted $IAM_USER"
   fi
-}
 
-# EIP cleanup
-eip_cleanup()
-{
-  echo "CLEANING UP EIP"
-  RESULT=$(aws ec2 describe-addresses --filter Name=tag:Name,Values=$EIP_ALLOC --query 'Addresses[].{AllocationId:AllocationId}' --output text)
-  while read -r LINE; do
-    aws ec2 release-address --allocation-id $LINE
-    if [[ $? == 0 ]] ;
-    then
-      echo "Successfully deleted $LINE"
-    fi
-  done <<< "$RESULT"
+  #DELETE IAM ROLE!!!
 }
 
 # VPC cleanup
@@ -273,13 +266,44 @@ kp_cleanup()
   fi
 }
 
+
+# NAT EC2 Cleanup
+opsman_cleanup()
+{
+  echo "CLEANING UP EC2 OPSMAN INSTANCE"
+  RESULT=$(aws ec2 describe-instances --filter Name=tag:Name,Values=$OPSMAN_INSTANCE --query 'Reservations[].Instances[].{InstanceId:InstanceId}' --output text)
+  while read -r LINE; do
+    aws ec2 terminate-instances --instance-ids $LINE
+    SECONDS=0
+    LAST_CHECK=0
+    STATE=""
+    until [[ "$STATE" == *TERMINATED ]]; do
+      INTERVAL=$SECONDS-$LAST_CHECK
+      if [[ $INTERVAL -ge $CHECK_FREQUENCY ]]; then
+        STATE=$(aws ec2 describe-instances --instance-ids $LINE --query 'Reservations[].Instances[].{State:State}'  --output text --region $REGION)
+        STATE=$(echo $STATE | tr '[:lower:]' '[:upper:]')
+        LAST_CHECK=$SECONDS
+      fi
+      SECS=$SECONDS
+      STATUS_MSG=$(printf $FORMATTED_MSG $STATE $(($SECS/3600)) $(($SECS%3600/60)) $(($SECS%60)))
+      printf "    $STATUS_MSG\033[0K\r"
+      sleep 1
+    done
+
+    if [[ $? == 0 ]] ;
+    then
+      echo "Successfully deleted $LINE"
+    fi
+  done <<< "$RESULT"
+}
+
 # Cleanup all
 cleanup()
 {
+  opsman_cleanup
   kp_cleanup
   nat_cleanup
   vpc_cleanup
-  eip_cleanup
   iam_cleanup
   s3_cleanup
   exit 0
@@ -294,6 +318,8 @@ echo "*** THIS SCRIPT WILL CONFIGURE AND USE YOUR AWS CLI. BEFORE YOU BEGIN MAKE
 echo "************************************ REQUIRES aws cli AND jw ********************************************"
 echo "*********************************************************************************************************"
 echo ""
+
+aws configure
 
 cleanup
 exit 0

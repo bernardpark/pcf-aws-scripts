@@ -23,121 +23,100 @@ declare -a BUCKETS=("bpark-pcf-ops-manager-bucket" "bpark-pcf-buildpacks-bucket"
 # IAM
 IAM_USER="pcf-user"
 IAM_USER_POLICY="pcf-iam-policy"
+IAM_USER_JSON="pcf-user.json"
+IAM_USER_KEYS_JSON="pcf-user-keys.json"
+
+IAM_ROLE="pcf-role"
+IAM_ROLE_POLICY="pcf-iam-role-trust-policy"
 
 # VPC, Initial Subnets, Internet Gateway, Route Tables, Elastic IP, NAT
 VPC="pcf-vpc"
-VPC_ID=""
 VPC_CIDR="10.0.0.0/16"
 
 SN_AZ0="us-east-2a"
 PUB_SN_AZ0="pcf-public-subnet-az0"
-PUB_SN_AZ0_ID=""
 PUB_SN_AZ0_CIDR="10.0.0.0/24"
 PRI_SN_AZ0="pcf-management-subnet-az0"
-PRI_SN_AZ0_ID=""
 PRI_SN_AZ0_CIDR="10.0.16.0/28"
 
 IGW="pcf-internet-gateway"
-IGW_ID=""
 
 RT_IGW="rt_igw"
-RT_IGW_ID=""
 RT_IGW_DEST_CIDR="0.0.0.0/0"
 
 RT_MAIN="rt_main"
-RT_MAIN_ID=""
 RT_MAIN_DEST_CIDR="0.0.0.0/0"
-
-EIP_ALLOC="eipalloc_nat"
-EIP_ALLOC_ID=""
 
 # Additional Subnets
 ERT_SN_AZ0="pcf-ert-subnet-az0"
-ERT_SN_AZ0_ID=""
 ERT_SN_AZ0_CIDR="10.0.4.0/24"
 SVC_SN_AZ0="pcf-services-subnet-az0"
-SVC_SN_AZ0_ID=""
 SVC_SN_AZ0_CIDR="10.0.8.0/24"
 RDS_SN_AZ0="pcf-rds-subnet-az0"
-RDS_SN_AZ0_ID=""
 RDS_SN_AZ0_CIDR="10.0.12.0/24"
 
 SN_AZ1="us-east-2b"
 PUB_SN_AZ1="pcf-public-subnet-az1"
-PUB_SN_AZ1_ID=""
 PUB_SN_AZ1_CIDR="10.0.1.0/24"
 PRI_SN_AZ1="pcf-management-subnet-az1"
-PRI_SN_AZ1_ID=""
 PRI_SN_AZ1_CIDR="10.0.16.16/28"
 ERT_SN_AZ1="pcf-ert-subnet-az1"
-ERT_SN_AZ1_ID=""
 ERT_SN_AZ1_CIDR="10.0.5.0/24"
 SVC_SN_AZ1="pcf-services-subnet-az1"
-SVC_SN_AZ1_ID=""
 SVC_SN_AZ1_CIDR="10.0.9.0/24"
 RDS_SN_AZ1="pcf-rds-subnet-az1"
-RDS_SN_AZ1_ID=""
 RDS_SN_AZ1_CIDR="10.0.13.0/24"
 
 SN_AZ2="us-east-2c"
 PUB_SN_AZ2="pcf-public-subnet-az2"
-PUB_SN_AZ2_ID=""
 PUB_SN_AZ2_CIDR="10.0.2.0/24"
 PRI_SN_AZ2="pcf-management-subnet-az2"
-PRI_SN_AZ2_ID=""
 PRI_SN_AZ2_CIDR="10.0.16.32/28"
 ERT_SN_AZ2="pcf-ert-subnet-az2"
-ERT_SN_AZ2_ID=""
 ERT_SN_AZ2_CIDR="10.0.6.0/24"
 SVC_SN_AZ2="pcf-services-subnet-az2"
-SVC_SN_AZ2_ID=""
 SVC_SN_AZ2_CIDR="10.0.10.0/24"
 RDS_SN_AZ2="pcf-rds-subnet-az2"
-RDS_SN_AZ2_ID=""
 RDS_SN_AZ2_CIDR="10.0.14.0/24"
 
 # Security Groups
-MY_IP="$(dig +short myip.opendns.com @resolver1.opendns.com)"
+MY_IP="$(curl -s http://whatismyip.akamai.com)"
 MY_IP_END="/32"
 MY_CIDR="$MY_IP$MY_IP_END"
 
 ANY_CIDR="0.0.0.0/0"
 
 OPSMAN_SG="pcf-ops-manager-security-group"
-OPSMAN_SG_ID=""
 OPSMAN_SG_DESC="Security Group for Ops Manager"
 
 PCFVM_SG="pcf-vms-security-group"
-PCFVM_SG_ID=""
 PCFVM_SG_DESC="Security Group for PCF VMs"
 
 WEBELB_SG="pcf-web-elb-security-group"
-WEBELB_SG_ID=""
 WEBELB_SG_DESC="Security Group for Web ELB"
 
 SSHELB_SG="pcf-ssh-elb-security-group"
-SSHELB_SG_ID=""
 SSHELB_SG_DESC="Security Group for SSH ELB"
 
 TCPELB_SG="pcf-tcp-elb-security-group"
-TCPELB_SG_ID=""
 TCPELB_SG_DESC="Security Group for TCP ELB"
 
 OBDNAT_SG="pcf-nat-security-group"
-OBDNAT_SG_ID=""
 OBDNAT_SG_DESC="Security Group for Outbound NAT"
 
 MYSQL_SG="MySQL"
-MYSQL_SG_ID=""
 MYSQL_SG_DESC="Security Group for MySQL"
 
 # EC2
 KEY_OPS_MAN="pcf-ops-manager-key"
-NAT_INSTANCE="nat-instance"
-NAT_INSTANCE_ID=""
+
+NAT_INSTANCE="pcf-nat"
 NAT_INSTANCE_TYPE="t2.medium"
 NAT_AMI="ami-bd6f59d8"
-ENI_ID=""
+
+OPSMAN_INSTANCE="pcf-ops-manager"
+OPSMAN_INSTANCE_TYPE="m3.large"
+OPSMAN_AMI="ami-0af8611563c4da56c"
 
 #==============================================================================
 #   Installation script below. Do not modify.
@@ -161,14 +140,17 @@ do
 done
 
 # Create IAM user
-aws iam create-user --user-name $IAM_USER > pcf-user.json
+aws iam create-user --user-name $IAM_USER > $IAM_USER_JSON
 echo "Succesfully created $IAM_USER."
 
-aws iam create-access-key --user-name $IAM_USER > pcf-user-keys.json
+aws iam create-access-key --user-name $IAM_USER > $IAM_USER_KEYS_JSON
 echo "Succesfully created access keys for $IAM_USER."
 
-aws iam put-user-policy --user-name $IAM_USER --policy-name $IAM_USER_POLICY --policy-document file://pcf-iam-policy.json
+aws iam put-user-policy --user-name $IAM_USER --policy-name $IAM_USER_POLICY --policy-document file://$IAM_USER_POLICY.json
 echo "Succesfully added inline policy for $IAM_USER."
+
+aws iam create-role --role-name $IAM_ROLE --assume-role-policy-document file://$IAM_ROLE_POLICY.json
+echo "Succesfully created role for $IAM_ROLE."
 
 # Create VPC
 VPC_ID=$(aws ec2 create-vpc --cidr-block $VPC_CIDR --query 'Vpc.{VpcId:VpcId}' --output text --region $REGION)
@@ -208,11 +190,6 @@ echo "Successfully associated Subnet $PUB_SN_AZ0_ID named $PUB_SN_AZ0 with Route
 aws ec2 modify-subnet-attribute --subnet-id $PUB_SN_AZ0_ID --map-public-ip-on-launch --region $REGION
 echo "Successfully enabled 'Auto-assign Public IP' on Subnet $PUB_SN_AZ0_ID named $PUB_SN_AZ0."
 
-# Allocate Elastic IP Address
-EIP_ALLOC_ID=$(aws ec2 allocate-address --domain vpc --query '{AllocationId:AllocationId}' --output text --region $REGION)
-aws ec2 create-tags --resources $EIP_ALLOC_ID --tags "Key=Name,Value=$EIP_ALLOC" --region $REGION
-echo "Successfully allocated Elastic IP address $EIP_ALLOC_ID named $EIP_ALLOC."
-
 # Create EC2 Key Pair
 KEY_OPS_MAN_ID=$(aws ec2 create-key-pair --key-name $KEY_OPS_MAN)
 echo "Successfully created ec2 key pair $KEY_OPS_MAN"
@@ -226,7 +203,7 @@ STATE=""
 until [[ "$STATE" == *RUNNING ]]; do
   INTERVAL=$SECONDS-$LAST_CHECK
   if [[ $INTERVAL -ge $CHECK_FREQUENCY ]]; then
-    STATE=$(aws ec2 describe-instances --instance-ids $LINE --query 'Reservations[].Instances[].{State:State}'  --output text --region $REGION)
+    STATE=$(aws ec2 describe-instances --instance-ids $NAT_INSTANCE_ID --query 'Reservations[].Instances[].{State:State}'  --output text --region $REGION)
     STATE=$(echo $STATE | tr '[:lower:]' '[:upper:]')
     LAST_CHECK=$SECONDS
   fi
@@ -332,11 +309,33 @@ OBDNAT_SG_ID=$(aws ec2 create-security-group --group-name $OBDNAT_SG --descripti
 aws ec2 authorize-security-group-ingress --group-id $OBDNAT_SG_ID --protocol all --port -1 --cidr $VPC_CIDR
 echo "Successfully created and configured Security Group $OBDNAT_SG_ID named $OBDNAT_SG in $VPC_ID."
 
-# Create and configure Security Group for Outbound NAT
+# Create and configure Security Group for MySQL
 MYSQL_SG_ID=$(aws ec2 create-security-group --group-name $MYSQL_SG --description "$MYSQL_SG_DESC" --vpc-id $VPC_ID --query '{GroupId:GroupId}' --output text)
 aws ec2 authorize-security-group-ingress --group-id $MYSQL_SG_ID --protocol tcp --port 3306 --cidr $VPC_CIDR
 aws ec2 authorize-security-group-egress --group-id $MYSQL_SG_ID --protocol all --port -1 --cidr $VPC_CIDR
 echo "Successfully created and configured Security Group $MYSQL_SG_ID named $MYSQL_SG in $VPC_ID."
+
+# Create Ops Manager Instance
+echo "CREATING OPSMAN INSTANCE"
+OPSMAN_INSTANCE_ID=$(aws ec2 run-instances --image-id $OPSMAN_AMI --count 1 --instance-type $OPSMAN_INSTANCE_TYPE --key-name $KEY_OPS_MAN --subnet-id $PUB_SN_AZ0_ID \
+  --iam-instance-profile Name=$IAM_USER --security-group-ids $OPSMAN_SG_ID --block-device-mappings file://pcf-opsman-block-device-mapping.json --query 'Instances[].{InstanceId:InstanceId}' --output text)
+aws ec2 create-tags --resources $OPSMAN_INSTANCE_ID --tags "Key=Name,Value=$OPSMAN_INSTANCE" --region $REGION
+SECONDS=0
+LAST_CHECK=0
+STATE=""
+until [[ "$STATE" == *RUNNING ]]; do
+  INTERVAL=$SECONDS-$LAST_CHECK
+  if [[ $INTERVAL -ge $CHECK_FREQUENCY ]]; then
+    STATE=$(aws ec2 describe-instances --instance-ids $OPSMAN_INSTANCE_ID --query 'Reservations[].Instances[].{State:State}'  --output text --region $REGION)
+    STATE=$(echo $STATE | tr '[:lower:]' '[:upper:]')
+    LAST_CHECK=$SECONDS
+  fi
+  SECS=$SECONDS
+  STATUS_MSG=$(printf $FORMATTED_MSG $STATE $(($SECS/3600)) $(($SECS%3600/60)) $(($SECS%60)))
+  printf "    $STATUS_MSG\033[0K\r"
+  sleep 1
+done
+echo "Successfully created Ops Manager Instance $OPSMAN_INSTANCE_ID named $OPSMAN_INSTANCE."
 
 echo "COMPLETED"
 exit 0
