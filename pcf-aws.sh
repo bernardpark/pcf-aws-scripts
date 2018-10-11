@@ -29,6 +29,8 @@ IAM_USER_KEYS_JSON="pcf-user-keys.json"
 IAM_ROLE="pcf-role"
 IAM_ROLE_POLICY="pcf-iam-role-trust-policy"
 
+IAM_PROFILE="pcf-profile"
+
 # VPC, Initial Subnets, Internet Gateway, Route Tables, Elastic IP, NAT
 VPC="pcf-vpc"
 VPC_CIDR="10.0.0.0/16"
@@ -115,8 +117,36 @@ NAT_INSTANCE_TYPE="t2.medium"
 NAT_AMI="ami-bd6f59d8"
 
 OPSMAN_INSTANCE="pcf-ops-manager"
-OPSMAN_INSTANCE_TYPE="m3.large"
+OPSMAN_INSTANCE_TYPE="m5.large"
 OPSMAN_AMI="ami-0af8611563c4da56c"
+
+# Certificates
+SSL_CERT_ARN="arn:aws:acm:us-east-2:008788954475:certificate/aceed5fc-98a9-4f89-8dfe-7aa06219695f"
+
+# Load Balancers
+WEB_ELB="pcf-web-elb"
+WEB_ELB_L0="Protocol=HTTP,LoadBalancerPort=80,InstanceProtocol=HTTP,InstancePort=80,SSLCertificateId=$SSL_CERT_ARN"
+WEB_ELB_L1="Protocol=HTTPS,LoadBalancerPort=443,InstanceProtocol=HTTP,InstancePort=80,SSLCertificateId=$SSL_CERT_ARN"
+WEB_ELB_L2="Protocol=SSL,LoadBalancerPort=4443,InstanceProtocol=TCP,InstancePort=80,SSLCertificateId=$SSL_CERT_ARN"
+
+SSH_ELB="pcf-ssh-elb"
+SSH_ELB_L0="Protocol=TCP,LoadBalancerPort=2222,InstanceProtocol=TCP,InstancePort=2222"
+
+TCP_ELB="pcf-tcp-elb"
+TCP_ELB_L0="Protocol=TCP,LoadBalancerPort=1024,InstanceProtocol=TCP,InstancePort=1024"
+
+# Route53
+ZONE_ID="Z3ISWYVRXCVRDH"
+ZONE_DOMAIN="pcfbpark.com"
+
+ZONE_UPDATE_TEMPLATE="pcf-zone-records-template.json"
+ZONE_UPDATE_JSON="pcf-zone-records.json"
+
+APP_DOMAIN="apps.$ZONE_DOMAIN"
+SYS_DOMAIN="system.$ZONE_DOMAIN"
+SSH_DOMAIN="ssh.$ZONE_DOMAIN"
+TCP_DOMAIN="tcp.$ZONE_DOMAIN"
+PCF_DOMAIN="pcf.$ZONE_DOMAIN"
 
 #==============================================================================
 #   Installation script below. Do not modify.
@@ -130,6 +160,7 @@ echo ""
 
 # Configure AWS CLI (interactive)
 aws configure
+echo ""
 
 # Create S3 Buckets
 echo "Creating S3 Buckets"
@@ -151,6 +182,10 @@ echo "Succesfully added inline policy for $IAM_USER."
 
 aws iam create-role --role-name $IAM_ROLE --assume-role-policy-document file://$IAM_ROLE_POLICY.json
 echo "Succesfully created role for $IAM_ROLE."
+
+# Create IAM instance profile
+IAM_PROFILE_ID=$(aws iam create-instance-profile --instance-profile-name $IAM_PROFILE --query 'InstanceProfile.{InstanceProfileId:InstanceProfileId}' --output text)
+aws iam add-role-to-instance-profile --role-name $IAM_ROLE --instance-profile-name $IAM_PROFILE
 
 # Create VPC
 VPC_ID=$(aws ec2 create-vpc --cidr-block $VPC_CIDR --query 'Vpc.{VpcId:VpcId}' --output text --region $REGION)
@@ -318,8 +353,7 @@ echo "Successfully created and configured Security Group $MYSQL_SG_ID named $MYS
 # Create Ops Manager Instance
 echo "CREATING OPSMAN INSTANCE"
 OPSMAN_INSTANCE_ID=$(aws ec2 run-instances --image-id $OPSMAN_AMI --count 1 --instance-type $OPSMAN_INSTANCE_TYPE --key-name $KEY_OPS_MAN --subnet-id $PUB_SN_AZ0_ID \
-  --iam-instance-profile Name=$IAM_USER --security-group-ids $OPSMAN_SG_ID --block-device-mappings file://pcf-opsman-block-device-mapping.json --query 'Instances[].{InstanceId:InstanceId}' --output text)
-aws ec2 create-tags --resources $OPSMAN_INSTANCE_ID --tags "Key=Name,Value=$OPSMAN_INSTANCE" --region $REGION
+  --iam-instance-profile Name=$IAM_PROFILE --security-group-ids $OPSMAN_SG_ID --block-device-mapping /dev/sda1=:100:false --query 'Instances[].{InstanceId:InstanceId}' --output text)
 SECONDS=0
 LAST_CHECK=0
 STATE=""
@@ -335,7 +369,41 @@ until [[ "$STATE" == *RUNNING ]]; do
   printf "    $STATUS_MSG\033[0K\r"
   sleep 1
 done
+aws ec2 create-tags --resources $OPSMAN_INSTANCE_ID --tags "Key=Name,Value=$OPSMAN_INSTANCE" --region $REGION
 echo "Successfully created Ops Manager Instance $OPSMAN_INSTANCE_ID named $OPSMAN_INSTANCE."
+
+# Create certificate
+
+# Create Web Load Balancer
+WEB_ELB_DNS=$(aws elb create-load-balancer --load-balancer-name $WEB_ELB --listeners "$WEB_ELB_L0" "$WEB_ELB_L1" "$WEB_ELB_L2" --scheme internal --subnets $PUB_SN_AZ0_ID $PUB_SN_AZ1_ID $PUB_SN_AZ2_ID --security-groups $WEBELB_SG_ID --query '{DNSName:DNSName}' --output text)
+aws elb configure-health-check --load-balancer-name $WEB_ELB --health-check Target=HTTP:8080/health,Interval=5,UnhealthyThreshold=3,HealthyThreshold=6,Timeout=3
+echo "Successfully created Web ELB $WEB_ELB at $WEB_ELB_DNS"
+
+# Create SSH Load Balancer
+SSH_ELB_DNS=$(aws elb create-load-balancer --load-balancer-name $SSH_ELB --listeners "$SSH_ELB_L0" --scheme internal --subnets $PUB_SN_AZ0_ID $PUB_SN_AZ1_ID $PUB_SN_AZ2_ID --security-groups $WEBELB_SG_ID --query '{DNSName:DNSName}' --output text)
+aws elb configure-health-check --load-balancer-name $SSH_ELB --health-check Target=TCP:2222,Interval=5,UnhealthyThreshold=3,HealthyThreshold=6,Timeout=3
+echo "Successfully created SSH ELB $SSH_ELB at $SSH_ELB_DNS"
+
+# Create TCP Load Balancer
+TCP_ELB_DNS=$(aws elb create-load-balancer --load-balancer-name $TCP_ELB --listeners "$TCP_ELB_L0" --scheme internal --subnets $PUB_SN_AZ0_ID $PUB_SN_AZ1_ID $PUB_SN_AZ2_ID --security-groups $TCPELB_SG_ID --query '{DNSName:DNSName}' --output text)
+aws elb configure-health-check --load-balancer-name $TCP_ELB --health-check Target=TCP:80,Interval=5,UnhealthyThreshold=3,HealthyThreshold=6,Timeout=3
+echo "Successfully created TCP ELB $TCP_ELB at $TCP_ELB_DNS"
+
+# Update CNAME and A records
+OPSMAN_IP=$(aws ec2 describe-instances --instance-ids $OPSMAN_INSTANCE_ID --query 'Reservations[].Instances[].{PublicIpAddress:PublicIpAddress}' --output text)
+sed -e "s+APP_DOMAIN+$APP_DOMAIN+g" -e "s+WEB_ELB+$WEB_ELB_DNS+g" \
+  -e "s+SYS_DOMAIN+$SYS_DOMAIN+g" \
+  -e "s+SSH_DOMAIN+$SSH_DOMAIN+g" -e "s+SSH_ELB+$SSH_ELB_DNS+g" \
+  -e "s+TCP_DOMAIN+$TCP_DOMAIN+g" -e "s+TCP_ELB+$TCP_ELB_DNS+g" \
+  -e "s+PCF_DOMAIN+$PCF_DOMAIN+g" -e "s+OPSMAN_IP+$OPSMAN_IP+g" \
+  $ZONE_UPDATE_TEMPLATE > $ZONE_UPDATE_JSON
+aws route53 change-resource-record-sets --hosted-zone-id $ZONE_ID --change-batch file://$ZONE_UPDATE_JSON
+echo "Successfully updated CNAME and A records"
+
+# Update NAT EC2 Instance Security Group
+aws ec2 modify-instance-attribute --instance-id $NAT_INSTANCE_ID --groups $OBDNAT_SG_ID
+echo "Successfully updated NAT instance $NAT_INSTANCE_ID security group to $OBDNAT_SG_ID"
+
 
 echo "COMPLETED"
 exit 0

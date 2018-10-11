@@ -29,6 +29,8 @@ IAM_USER_KEYS_JSON="pcf-user-keys.json"
 IAM_ROLE="pcf-role"
 IAM_ROLE_POLICY="pcf-iam-role-trust-policy"
 
+IAM_PROFILE="pcf-profile"
+
 # VPC, Initial Subnets, Internet Gateway, Route Tables, Elastic IP, NAT
 VPC="pcf-vpc"
 VPC_ID=""
@@ -122,6 +124,13 @@ OPSMAN_INSTANCE="pcf-ops-manager"
 OPSMAN_INSTANCE_TYPE="m3.large"
 OPSMAN_AMI="ami-0af8611563c4da56c"
 
+# Load Balancers
+WEB_ELB="pcf-web-elb"
+
+SSH_ELB="pcf-ssh-elb"
+
+TCP_ELB="pcf-tcp-elb"
+
 #==============================================================================
 #   Functions below. Do not modify.
 #==============================================================================
@@ -163,7 +172,13 @@ iam_cleanup()
     echo "Successfully deleted $IAM_USER"
   fi
 
-  #DELETE IAM ROLE!!!
+  aws iam remove-role-from-instance-profile --instance-profile-name $IAM_PROFILE --role-name $IAM_ROLE
+
+  aws iam delete-role --role-name $IAM_ROLE
+  echo "Successfully deleted $IAM_ROLE"
+
+  aws iam delete-instance-profile --instance-profile-name $IAM_PROFILE
+  echo "Succesfully deleted $IAM_PROFILE"
 }
 
 # VPC cleanup
@@ -175,6 +190,10 @@ vpc_cleanup()
   while read -r LINE; do
     RESULT_SUBNET=$(aws ec2 describe-subnets --filter Name=vpc-id,Values=$LINE --query 'Subnets[].{SubnetId:SubnetId}' --output text)
     while read -r LINE_SUBNET; do
+      if [[ -z "$LINE_SUBNET" ]] 
+      then
+        break
+      fi
       aws ec2 delete-subnet --subnet-id $LINE_SUBNET
       if [[ $? == 0 ]] ;
       then
@@ -184,6 +203,10 @@ vpc_cleanup()
 
     RESULT_RT=$(aws ec2 describe-route-tables --filter Name=vpc-id,Values=$LINE --query 'RouteTables[].{RouteTableId:RouteTableId}' --output text)
     while read -r LINE_RT; do
+      if [[ -z "$LINE_RT" ]]
+      then
+        break
+      fi
       aws ec2 delete-route-table --route-table-id $LINE_RT
       if [[ $? == 0 ]] ;
       then
@@ -193,6 +216,10 @@ vpc_cleanup()
 
     RESULT_IGW=$(aws ec2 describe-internet-gateways --filter Name=attachment.vpc-id,Values=$LINE --query 'InternetGateways[].{InternetGatewayId:InternetGatewayId}' --output text)
     while read -r LINE_IGW; do
+      if [[ -z "$LINE_IGW" ]] 
+      then
+        break
+      fi
       aws ec2 detach-internet-gateway --internet-gateway-id $LINE_IGW
       aws ec2 delete-internet-gateway --internet-gateway-id $LINE_IGW
       if [[ $? == 0 ]] ;
@@ -203,6 +230,10 @@ vpc_cleanup()
 
     RESULT_ACL=$(aws ec2 describe-network-acls --filter Name=vpc-id,Values=$LINE --query 'NetworkAcls[].{NetworkAclId:NetworkAclId}' --output text)
     while read -r LINE_ACL; do
+      if [[ -z "$LINE_ACL" ]] 
+      then
+        break
+      fi
       aws ec2 delete-network-acl --network-acl-id $LINE_ACL
       if [[ $? == 0 ]] ;
       then
@@ -213,7 +244,7 @@ vpc_cleanup()
     RESULT_SEC_GROUP=$(aws ec2 describe-security-groups --filter Name=vpc-id,Values=$LINE --query 'SecurityGroups[].{GroupId:GroupId}' --output text)
     while read -r LINE_SEC_GROUP; do
       aws ec2 delete-security-group --group-id $LINE_SEC_GROUP
-      if [[ $? == 0 ]] ;
+      if [[ -z "$LINE_SEC_GROUP" ]] 
       then
         echo "  Successfully deleted $LINE_SEC_GROUP"
       fi
@@ -232,6 +263,10 @@ nat_cleanup()
   echo "CLEANING UP EC2 NAT INSTANCE"
   RESULT=$(aws ec2 describe-instances --filter Name=tag:Name,Values=$NAT_INSTANCE --query 'Reservations[].Instances[].{InstanceId:InstanceId}' --output text)
   while read -r LINE; do
+    if [[ -z "$LINE" ]]
+    then
+      break
+    fi	
     aws ec2 terminate-instances --instance-ids $LINE
     SECONDS=0
     LAST_CHECK=0
@@ -267,12 +302,16 @@ kp_cleanup()
 }
 
 
-# NAT EC2 Cleanup
+# Opsman Cleanup
 opsman_cleanup()
 {
   echo "CLEANING UP EC2 OPSMAN INSTANCE"
   RESULT=$(aws ec2 describe-instances --filter Name=tag:Name,Values=$OPSMAN_INSTANCE --query 'Reservations[].Instances[].{InstanceId:InstanceId}' --output text)
   while read -r LINE; do
+    if [[ -z "$LINE" ]] 
+    then
+      break
+    fi
     aws ec2 terminate-instances --instance-ids $LINE
     SECONDS=0
     LAST_CHECK=0
@@ -297,9 +336,19 @@ opsman_cleanup()
   done <<< "$RESULT"
 }
 
+# ELB Cleanup
+elb_cleanup()
+{
+  aws elb delete-load-balancer --load-balancer-name $WEB_ELB
+  aws elb delete-load-balancer --load-balancer-name $SSH_ELB
+  aws elb delete-load-balancer --load-balancer-name $TCP_ELB
+  echo "Successfully deleted $WEB_ELB, $SSH_ELB, and $TCP_ELB"
+}
+
 # Cleanup all
 cleanup()
 {
+  elb_cleanup
   opsman_cleanup
   kp_cleanup
   nat_cleanup
@@ -320,6 +369,7 @@ echo "**************************************************************************
 echo ""
 
 aws configure
+echo ""
 
 cleanup
 exit 0
