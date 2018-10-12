@@ -554,7 +554,7 @@ aws ec2 authorize-security-group-ingress \
   --protocol tcp \
   --port 25555 \
   --cidr $VPC_CIDR
-echo "Successfully created and configured Security Group $OPSMAN_SG in $VPC_ID."
+echo "Successfully created and configured Security Group $OPSMAN_SG in $VPC."
 
 # Create and configure Security Group for PCF VMS
 PCFVM_SG_ID=$(aws ec2 create-security-group \
@@ -568,7 +568,7 @@ aws ec2 authorize-security-group-ingress \
   --protocol all \
   --port -1 \
   --cidr $VPC_CIDR
-echo "Successfully created and configured Security Group $PCFVM_SG in $VPC_ID."
+echo "Successfully created and configured Security Group $PCFVM_SG in $VPC."
 
 # Create and configure Security Group for Web ELB
 WEBELB_SG_ID=$(aws ec2 create-security-group \
@@ -592,7 +592,7 @@ aws ec2 authorize-security-group-ingress \
   --protocol tcp \
   --port 443 \
   --cidr $ANY_CIDR
-echo "Successfully created and configured Security Group $WEBELB_SG in $VPC_ID."
+echo "Successfully created and configured Security Group $WEBELB_SG in $VPC."
 
 # Create and configure Security Group for SSH ELB
 SSHELB_SG_ID=$(aws ec2 create-security-group \
@@ -606,7 +606,7 @@ aws ec2 authorize-security-group-ingress \
   --protocol tcp \
   --port 2222 \
   --cidr $ANY_CIDR
-echo "Successfully created and configured Security Group $SSHELB_SG in $VPC_ID."
+echo "Successfully created and configured Security Group $SSHELB_SG in $VPC."
 
 # Create and configure Security Group for TCP ELB
 TCPELB_SG_ID=$(aws ec2 create-security-group \
@@ -620,7 +620,7 @@ aws ec2 authorize-security-group-ingress \
   --protocol tcp \
   --port 1024-1123 \
   --cidr $ANY_CIDR
-echo "Successfully created and configured Security Group $TCPELB_SG in $VPC_ID."
+echo "Successfully created and configured Security Group $TCPELB_SG in $VPC."
 
 # Create and configure Security Group for Outbound NAT
 OBDNAT_SG_ID=$(aws ec2 create-security-group \
@@ -634,7 +634,7 @@ aws ec2 authorize-security-group-ingress \
   --protocol all \
   --port -1 \
   --cidr $VPC_CIDR
-echo "Successfully created and configured Security Group $OBDNAT_SG in $VPC_ID."
+echo "Successfully created and configured Security Group $OBDNAT_SG in $VPC."
 
 # Create and configure Security Group for MySQL
 MYSQL_SG_ID=$(aws ec2 create-security-group \
@@ -653,7 +653,7 @@ aws ec2 authorize-security-group-egress \
   --protocol all \
   --port -1 \
   --cidr $VPC_CIDR
-echo "Successfully created and configured Security Group $MYSQL_SG in $VPC_ID."
+echo "Successfully created and configured Security Group $MYSQL_SG in $VPC."
 
 # Create Ops Manager Instance
 OPSMAN_INSTANCE_ID=$(aws ec2 run-instances \
