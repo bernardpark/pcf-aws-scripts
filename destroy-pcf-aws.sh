@@ -131,6 +131,23 @@ SSH_ELB="pcf-ssh-elb"
 
 TCP_ELB="pcf-tcp-elb"
 
+# Route53
+ZONE_ID="Z3ISWYVRXCVRDH"
+ZONE_DOMAIN="pcfbpark.com"
+
+ZONE_UPDATE_TEMPLATE="pcf-zone-records-template.json"
+ZONE_UPDATE_JSON="pcf-zone-records.json"
+
+APP_DOMAIN="apps.$ZONE_DOMAIN"
+SYS_DOMAIN="system.$ZONE_DOMAIN"
+SSH_DOMAIN="ssh.$ZONE_DOMAIN"
+TCP_DOMAIN="tcp.$ZONE_DOMAIN"
+PCF_DOMAIN="pcf.$ZONE_DOMAIN"
+
+# RDS
+RDS_ID="pcf-ops-manager-director"
+RDS_SN_GRP="pcf-rds-subnet-group"
+
 #==============================================================================
 #   Functions below. Do not modify.
 #==============================================================================
@@ -345,9 +362,32 @@ elb_cleanup()
   echo "Successfully deleted $WEB_ELB, $SSH_ELB, and $TCP_ELB"
 }
 
+# Delete CNAME and A records
+r53_cleanup()
+{
+  sed -e "s+APP_DOMAIN+$APP_DOMAIN+g" -e "s+WEB_ELB+$WEB_ELB_DNS+g" \
+    -e "s+SYS_DOMAIN+$SYS_DOMAIN+g" \
+    -e "s+SSH_DOMAIN+$SSH_DOMAIN+g" -e "s+SSH_ELB+$SSH_ELB_DNS+g" \
+    -e "s+TCP_DOMAIN+$TCP_DOMAIN+g" -e "s+TCP_ELB+$TCP_ELB_DNS+g" \
+    -e "s+PCF_DOMAIN+$PCF_DOMAIN+g" -e "s+OPSMAN_IP+$OPSMAN_IP+g" \
+    -e "s+CREATE+DELETE+g" \
+    $ZONE_UPDATE_TEMPLATE > $ZONE_UPDATE_JSON
+  aws route53 change-resource-record-sets --hosted-zone-id $ZONE_ID --change-batch file://$ZONE_UPDATE_JSON
+  echo "Successfully deleted CNAME and A records"
+}
+
+# RDS Cleanup
+rds_cleanup()
+{
+aws rds delete-db-instance --db-instance-identifier $RDS_ID --skip-final-snapshot
+aws rds delete-db-subnet-group --db-subnet-group-name $RDS_SN_GRP 
+}
+
 # Cleanup all
 cleanup()
 {
+  rds_cleanup
+  r53_cleanup
   elb_cleanup
   opsman_cleanup
   kp_cleanup

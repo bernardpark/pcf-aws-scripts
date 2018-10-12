@@ -106,7 +106,7 @@ TCPELB_SG_DESC="Security Group for TCP ELB"
 OBDNAT_SG="pcf-nat-security-group"
 OBDNAT_SG_DESC="Security Group for Outbound NAT"
 
-MYSQL_SG="MySQL"
+MYSQL_SG="pcf-rds-security-group"
 MYSQL_SG_DESC="Security Group for MySQL"
 
 # EC2
@@ -148,6 +148,13 @@ SSH_DOMAIN="ssh.$ZONE_DOMAIN"
 TCP_DOMAIN="tcp.$ZONE_DOMAIN"
 PCF_DOMAIN="pcf.$ZONE_DOMAIN"
 
+# RDS
+RDS_SN_GRP="pcf-rds-subnet-group"
+RDS_SN_GRP_DESC="RDS Subnet Group for PCF"
+RDS_ID="pcf-ops-manager-director"
+RDS_CLASS="db.m4.large"
+RDS_NAME="bosh"
+
 #==============================================================================
 #   Installation script below. Do not modify.
 #==============================================================================
@@ -166,79 +173,161 @@ echo ""
 echo "Creating S3 Buckets"
 for BUCKET in "${BUCKETS[@]}"
 do
-  aws s3api create-bucket --bucket $BUCKET --region $REGION --create-bucket-configuration LocationConstraint=$REGION
-  echo "Succesfully created $BUCKET in $REGION."
+  aws s3api create-bucket \
+    --bucket $BUCKET \
+    --region $REGION \
+    --create-bucket-configuration LocationConstraint=$REGION
+  echo "Successfully created $BUCKET in $REGION."
 done
 
 # Create IAM user
-aws iam create-user --user-name $IAM_USER > $IAM_USER_JSON
-echo "Succesfully created $IAM_USER."
+aws iam create-user \
+  --user-name $IAM_USER \
+  > $IAM_USER_JSON
+echo "Successfully created $IAM_USER."
 
-aws iam create-access-key --user-name $IAM_USER > $IAM_USER_KEYS_JSON
-echo "Succesfully created access keys for $IAM_USER."
+aws iam create-access-key \
+  --user-name $IAM_USER \
+  > $IAM_USER_KEYS_JSON
+echo "Successfully created access keys for $IAM_USER."
 
-aws iam put-user-policy --user-name $IAM_USER --policy-name $IAM_USER_POLICY --policy-document file://$IAM_USER_POLICY.json
-echo "Succesfully added inline policy for $IAM_USER."
+aws iam put-user-policy \
+  --user-name $IAM_USER \
+  --policy-name $IAM_USER_POLICY \
+  --policy-document file://$IAM_USER_POLICY.json
+echo "Successfully added inline policy for $IAM_USER."
 
-aws iam create-role --role-name $IAM_ROLE --assume-role-policy-document file://$IAM_ROLE_POLICY.json
-echo "Succesfully created role for $IAM_ROLE."
+aws iam create-role \
+  --role-name $IAM_ROLE \
+  --assume-role-policy-document file://$IAM_ROLE_POLICY.json
+echo "Successfully created role for $IAM_ROLE."
 
 # Create IAM instance profile
-IAM_PROFILE_ID=$(aws iam create-instance-profile --instance-profile-name $IAM_PROFILE --query 'InstanceProfile.{InstanceProfileId:InstanceProfileId}' --output text)
-aws iam add-role-to-instance-profile --role-name $IAM_ROLE --instance-profile-name $IAM_PROFILE
+IAM_PROFILE_ID=$(aws iam create-instance-profile \
+  --instance-profile-name $IAM_PROFILE \
+  --query 'InstanceProfile.{InstanceProfileId:InstanceProfileId}' \
+  --output text)
+aws iam add-role-to-instance-profile \
+  --role-name $IAM_ROLE \
+  --instance-profile-name $IAM_PROFILE
 
 # Create VPC
-VPC_ID=$(aws ec2 create-vpc --cidr-block $VPC_CIDR --query 'Vpc.{VpcId:VpcId}' --output text --region $REGION)
-aws ec2 create-tags --resources $VPC_ID --tags Key=Name,Value=$VPC
-echo "Successfully created VPC $VPC_ID named $VPC in $REGION."
+VPC_ID=$(aws ec2 create-vpc \
+  --cidr-block $VPC_CIDR \
+  --region $REGION \
+  --query 'Vpc.{VpcId:VpcId}' \
+  --output text)
+aws ec2 create-tags \
+  --resources $VPC_ID \
+  --tags Key=Name,Value=$VPC
+echo "Successfully created VPC $VPC in $REGION."
 
 # Create First Public Subnet
-PUB_SN_AZ0_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $PUB_SN_AZ0_CIDR --availability-zone $SN_AZ0 --query 'Subnet.{SubnetId:SubnetId}' --output text --region $REGION)
-aws ec2 create-tags --resources $PUB_SN_AZ0_ID --tags "Key=Name,Value=$PUB_SN_AZ0" --region $REGION
-echo "Successfully created Subnet $PUB_SN_AZ0_ID named $PUB_SN_AZ0 in $SN_AZ0."
+PUB_SN_AZ0_ID=$(aws ec2 create-subnet \
+  --vpc-id $VPC_ID \
+  --cidr-block $PUB_SN_AZ0_CIDR \
+  --availability-zone $SN_AZ0 \
+  --region $REGION \
+  --query 'Subnet.{SubnetId:SubnetId}' \
+  --output text)
+aws ec2 create-tags \
+  --resources $PUB_SN_AZ0_ID \
+  --region $REGION \
+  --tags "Key=Name,Value=$PUB_SN_AZ0"
+echo "Successfully created Subnet $PUB_SN_AZ0 in $SN_AZ0."
 
 # Create First Private Subnet
-PRI_SN_AZ0_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $PRI_SN_AZ0_CIDR --availability-zone $SN_AZ0 --query 'Subnet.{SubnetId:SubnetId}' --output text --region $REGION)
-aws ec2 create-tags --resources $PRI_SN_AZ0_ID --tags "Key=Name,Value=$PRI_SN_AZ0" --region $REGION
-echo "Successfully created Subnet $PRI_SN_AZ0_ID named $PRI_SN_AZ0 in $SN_AZ0."
+PRI_SN_AZ0_ID=$(aws ec2 create-subnet \
+  --vpc-id $VPC_ID \
+  --cidr-block $PRI_SN_AZ0_CIDR \
+  --availability-zone $SN_AZ0 \
+  --region $REGION \
+  --query 'Subnet.{SubnetId:SubnetId}' \
+  --output text)
+aws ec2 create-tags \
+  --resources $PRI_SN_AZ0_ID \
+  --tags "Key=Name,Value=$PRI_SN_AZ0" \
+  --region $REGION
+echo "Successfully created Subnet $PRI_SN_AZ0 in $SN_AZ0."
 
 # Create Internet gateway
-IGW_ID=$(aws ec2 create-internet-gateway --query 'InternetGateway.{InternetGatewayId:InternetGatewayId}' --output text --region $REGION)
-aws ec2 create-tags --resources $IGW_ID --tags "Key=Name,Value=$IGW" --region $REGION
-aws ec2 attach-internet-gateway --vpc-id $VPC_ID --internet-gateway-id $IGW_ID --region $REGION
-echo "Successfully created Internet Gateway $IGW_ID named $IGW attached to VPC $VPC_ID named $VPC."
+IGW_ID=$(aws ec2 create-internet-gateway \
+  --region $REGION \
+  --query 'InternetGateway.{InternetGatewayId:InternetGatewayId}' \
+  --output text)
+aws ec2 create-tags \
+  --resources $IGW_ID \
+  --region $REGION \
+  --tags "Key=Name,Value=$IGW"
+aws ec2 attach-internet-gateway \
+  --vpc-id $VPC_ID \
+  --internet-gateway-id $IGW_ID \
+  --region $REGION
+echo "Successfully created Internet Gateway $IGW attached to VPC $VPC."
 
 # Create Route Table
-RT_IGW_ID=$(aws ec2 create-route-table --vpc-id $VPC_ID --query 'RouteTable.{RouteTableId:RouteTableId}' --output text --region $REGION)
-aws ec2 create-tags --resources $RT_IGW_ID --tags "Key=Name,Value=$RT_IGW" --region $REGION
-echo "Successfully created Route Table $RT_IGW_ID named $RT_IGW."
+RT_IGW_ID=$(aws ec2 create-route-table \
+  --vpc-id $VPC_ID \
+  --region $REGION \
+  --query 'RouteTable.{RouteTableId:RouteTableId}' \
+  --output text)
+aws ec2 create-tags \
+  --resources $RT_IGW_ID \
+  --tags "Key=Name,Value=$RT_IGW" \
+  --region $REGION
+echo "Successfully created Route Table $RT_IGW."
 
 # Create route to Internet Gateway
-RESULT=$(aws ec2 create-route --route-table-id $RT_IGW_ID --destination-cidr-block $RT_IGW_DEST_CIDR --gateway-id $IGW_ID --region $REGION)
-echo "Successfully added route to $RT_IGW_DEST_CIDR in Route Table $RT_IGW_ID named $RT_IGW via Internet Gateway $IGW_ID named $IGW."
+aws ec2 create-route \
+  --route-table-id $RT_IGW_ID \
+  --destination-cidr-block $RT_IGW_DEST_CIDR \
+  --gateway-id $IGW_ID \
+  --region $REGION
+echo "Successfully added route to $RT_IGW_DEST_CIDR in Route Table $RT_IGW via Internet Gateway $IGW."
 
 # Associate Public Subnet with Route Table
-RESULT=$(aws ec2 associate-route-table --subnet-id $PUB_SN_AZ0_ID --route-table-id $RT_IGW_ID --region $REGION)
-echo "Successfully associated Subnet $PUB_SN_AZ0_ID named $PUB_SN_AZ0 with Route Table $RT_IGW_ID named $RT_IGW."
+aws ec2 associate-route-table \
+  --subnet-id $PUB_SN_AZ0_ID \
+  --route-table-id $RT_IGW_ID \
+  --region $REGION
+echo "Successfully associated Subnet $PUB_SN_AZ0 with Route Table $RT_IGW."
 
 # Enable Auto-assign Public IP on Public Subnet
-aws ec2 modify-subnet-attribute --subnet-id $PUB_SN_AZ0_ID --map-public-ip-on-launch --region $REGION
-echo "Successfully enabled 'Auto-assign Public IP' on Subnet $PUB_SN_AZ0_ID named $PUB_SN_AZ0."
+aws ec2 modify-subnet-attribute \
+  --subnet-id $PUB_SN_AZ0_ID \
+  --map-public-ip-on-launch \
+  --region $REGION
+echo "Successfully enabled 'Auto-assign Public IP' on Subnet $PUB_SN_AZ0."
 
 # Create EC2 Key Pair
-KEY_OPS_MAN_ID=$(aws ec2 create-key-pair --key-name $KEY_OPS_MAN)
+KEY_OPS_MAN_ID=$(aws ec2 create-key-pair \
+  --key-name $KEY_OPS_MAN)
 echo "Successfully created ec2 key pair $KEY_OPS_MAN"
 
 # Create NAT Instance
-NAT_INSTANCE_ID=$(aws ec2 run-instances --image-id $NAT_AMI --count 1 --instance-type $NAT_INSTANCE_TYPE --key-name $KEY_OPS_MAN --subnet-id $PUB_SN_AZ0_ID --query 'Instances[].{InstanceId:InstanceId}' --output text)
-aws ec2 create-tags --resources $NAT_INSTANCE_ID --tags "Key=Name,Value=$NAT_INSTANCE" --region $REGION
+NAT_INSTANCE_ID=$(aws ec2 run-instances \
+  --image-id $NAT_AMI \
+  --count 1 \
+  --instance-type $NAT_INSTANCE_TYPE \
+  --key-name $KEY_OPS_MAN \
+  --subnet-id $PUB_SN_AZ0_ID \
+  --query 'Instances[].{InstanceId:InstanceId}' \
+  --output text)
+aws ec2 create-tags \
+  --resources $NAT_INSTANCE_ID \
+  --tags "Key=Name,Value=$NAT_INSTANCE" \
+  --region $REGION
 SECONDS=0
 LAST_CHECK=0
 STATE=""
 until [[ "$STATE" == *RUNNING ]]; do
   INTERVAL=$SECONDS-$LAST_CHECK
   if [[ $INTERVAL -ge $CHECK_FREQUENCY ]]; then
-    STATE=$(aws ec2 describe-instances --instance-ids $NAT_INSTANCE_ID --query 'Reservations[].Instances[].{State:State}'  --output text --region $REGION)
+    STATE=$(aws ec2 describe-instances \
+      --instance-ids $NAT_INSTANCE_ID \
+      --region $REGION \
+      --query 'Reservations[].Instances[].{State:State}'  \
+      --output text)
     STATE=$(echo $STATE | tr '[:lower:]' '[:upper:]')
     LAST_CHECK=$SECONDS
   fi
@@ -247,120 +336,348 @@ until [[ "$STATE" == *RUNNING ]]; do
   printf "    $STATUS_MSG\033[0K\r"
   sleep 1
 done
-echo "Successfully created NAT Instance $NAT_INSTANCE_ID named $NAT_INSTANCE."
+echo "Successfully created NAT Instance $NAT_INSTANCE."
 
 # Create Main Route Table route to NAT ENI
-ENI_ID=$(aws ec2 describe-network-interfaces --filter Name=subnet-id,Values=$PUB_SN_AZ0_ID --query 'NetworkInterfaces[].{NetworkInterfaceId:NetworkInterfaceId}' --output text)
-RT_MAIN_ID=$(aws ec2 describe-route-tables --filters Name=vpc-id,Values=$VPC_ID Name=association.main,Values=true --query 'RouteTables[*].{RouteTableId:RouteTableId}' --output text --region $REGION)
-RESULT=$(aws ec2 create-route --route-table-id $RT_MAIN_ID --destination-cidr-block $RT_MAIN_DEST_CIDR --network-interface-id $ENI_ID --region $REGION)
-echo "Successfully created route from $RT_MAIN_ID to NAT ENI $ENI_ID"
+ENI_ID=$(aws ec2 describe-network-interfaces \
+  --filter Name=subnet-id,Values=$PUB_SN_AZ0_ID \
+  --query 'NetworkInterfaces[].{NetworkInterfaceId:NetworkInterfaceId}' \
+  --output text)
+RT_MAIN_ID=$(aws ec2 describe-route-tables \
+  --filters Name=vpc-id,Values=$VPC_ID Name=association.main,Values=true \
+  --region $REGION \
+  --query 'RouteTables[*].{RouteTableId:RouteTableId}' \
+  --output text)
+aws ec2 create-route \
+  --route-table-id $RT_MAIN_ID \
+  --destination-cidr-block $RT_MAIN_DEST_CIDR \
+  --network-interface-id $ENI_ID \
+  --region $REGION
+echo "Successfully created route from $RT_MAIN to NAT ENI $ENI_ID"
 
 # Create Subsequent Public Subnets
-PUB_SN_AZ1_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $PUB_SN_AZ1_CIDR --availability-zone $SN_AZ1 --query 'Subnet.{SubnetId:SubnetId}' --output text --region $REGION)
-aws ec2 create-tags --resources $PUB_SN_AZ1_ID --tags "Key=Name,Value=$PUB_SN_AZ1" --region $REGION
-echo "Successfully created Subnet $PUB_SN_AZ1_ID named $PUB_SN_AZ1 in $SN_AZ1."
+PUB_SN_AZ1_ID=$(aws ec2 create-subnet \
+  --vpc-id $VPC_ID \
+  --cidr-block $PUB_SN_AZ1_CIDR \
+  --availability-zone $SN_AZ1 \
+  --region $REGION \
+  --query 'Subnet.{SubnetId:SubnetId}' \
+  --output text)
+aws ec2 create-tags \
+  --resources $PUB_SN_AZ1_ID \
+  --tags "Key=Name,Value=$PUB_SN_AZ1" \
+  --region $REGION
+echo "Successfully created Subnet $PUB_SN_AZ1 in $SN_AZ1."
 
-PUB_SN_AZ2_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $PUB_SN_AZ2_CIDR --availability-zone $SN_AZ2 --query 'Subnet.{SubnetId:SubnetId}' --output text --region $REGION)
+PUB_SN_AZ2_ID=$(aws ec2 create-subnet \
+  --vpc-id $VPC_ID \
+  --cidr-block $PUB_SN_AZ2_CIDR \
+  --availability-zone $SN_AZ2 \
+  --region $REGION \
+  --query 'Subnet.{SubnetId:SubnetId}' \
+  --output text)
 aws ec2 create-tags --resources $PUB_SN_AZ2_ID --tags "Key=Name,Value=$PUB_SN_AZ2" --region $REGION
-echo "Successfully created Subnet $PUB_SN_AZ2_ID named $PUB_SN_AZ2 in $SN_AZ2."
+echo "Successfully created Subnet $PUB_SN_AZ2 in $SN_AZ2."
 
-PRI_SN_AZ1_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $PRI_SN_AZ1_CIDR --availability-zone $SN_AZ1 --query 'Subnet.{SubnetId:SubnetId}' --output text --region $REGION)
-aws ec2 create-tags --resources $PRI_SN_AZ1_ID --tags "Key=Name,Value=$PRI_SN_AZ1" --region $REGION
-echo "Successfully created Subnet $PRI_SN_AZ1_ID named $PRI_SN_AZ1 in $SN_AZ1."
+PRI_SN_AZ1_ID=$(aws ec2 create-subnet \
+  --vpc-id $VPC_ID \
+  --cidr-block $PRI_SN_AZ1_CIDR \
+  --availability-zone $SN_AZ1 \
+  --region $REGION \
+  --query 'Subnet.{SubnetId:SubnetId}' \
+  --output text)
+aws ec2 create-tags \
+  --resources $PRI_SN_AZ1_ID \
+  --tags "Key=Name,Value=$PRI_SN_AZ1" \
+  --region $REGION
+echo "Successfully created Subnet $PRI_SN_AZ1 in $SN_AZ1."
 
-PRI_SN_AZ2_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $PRI_SN_AZ2_CIDR --availability-zone $SN_AZ2 --query 'Subnet.{SubnetId:SubnetId}' --output text --region $REGION)
-aws ec2 create-tags --resources $PRI_SN_AZ2_ID --tags "Key=Name,Value=$PRI_SN_AZ2" --region $REGION
-echo "Successfully created Subnet $PRI_SN_AZ2_ID named $PRI_SN_AZ2 in $SN_AZ2."
+PRI_SN_AZ2_ID=$(aws ec2 create-subnet \
+  --vpc-id $VPC_ID \
+  --cidr-block $PRI_SN_AZ2_CIDR \
+  --availability-zone $SN_AZ2 \
+  --region $REGION \
+  --query 'Subnet.{SubnetId:SubnetId}' \
+  --output text)
+aws ec2 create-tags \
+  --resources $PRI_SN_AZ2_ID \
+  --tags "Key=Name,Value=$PRI_SN_AZ2" \
+  --region $REGION
+echo "Successfully created Subnet $PRI_SN_AZ2 in $SN_AZ2."
 
-ERT_SN_AZ0_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $ERT_SN_AZ0_CIDR --availability-zone $SN_AZ0 --query 'Subnet.{SubnetId:SubnetId}' --output text --region $REGION)
-aws ec2 create-tags --resources $ERT_SN_AZ0_ID --tags "Key=Name,Value=$ERT_SN_AZ0" --region $REGION
-echo "Successfully created Subnet $ERT_SN_AZ0_ID named $ERT_SN_AZ0 in $SN_AZ0."
+ERT_SN_AZ0_ID=$(aws ec2 create-subnet \
+  --vpc-id $VPC_ID \
+  --cidr-block $ERT_SN_AZ0_CIDR \
+  --availability-zone $SN_AZ0 \
+  --region $REGION \
+  --query 'Subnet.{SubnetId:SubnetId}' \
+  --output text)
+aws ec2 create-tags \
+  --resources $ERT_SN_AZ0_ID \
+  --tags "Key=Name,Value=$ERT_SN_AZ0" \
+  --region $REGION
+echo "Successfully created Subnet $ERT_SN_AZ0 in $SN_AZ0."
 
-ERT_SN_AZ1_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $ERT_SN_AZ1_CIDR --availability-zone $SN_AZ1 --query 'Subnet.{SubnetId:SubnetId}' --output text --region $REGION)
-aws ec2 create-tags --resources $ERT_SN_AZ1_ID --tags "Key=Name,Value=$ERT_SN_AZ1" --region $REGION
-echo "Successfully created Subnet $ERT_SN_AZ1_ID named $ERT_SN_AZ1 in $SN_AZ1."
+ERT_SN_AZ1_ID=$(aws ec2 create-subnet \
+  --vpc-id $VPC_ID \
+  --cidr-block $ERT_SN_AZ1_CIDR \
+  --availability-zone $SN_AZ1 \
+  --region $REGION \
+  --query 'Subnet.{SubnetId:SubnetId}' \
+  --output text)
+aws ec2 create-tags \
+  --resources $ERT_SN_AZ1_ID \
+  --tags "Key=Name,Value=$ERT_SN_AZ1" \
+  --region $REGION
+echo "Successfully created Subnet $ERT_SN_AZ1 in $SN_AZ1."
 
-ERT_SN_AZ2_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $ERT_SN_AZ2_CIDR --availability-zone $SN_AZ2 --query 'Subnet.{SubnetId:SubnetId}' --output text --region $REGION)
-aws ec2 create-tags --resources $ERT_SN_AZ2_ID --tags "Key=Name,Value=$ERT_SN_AZ2" --region $REGION
-echo "Successfully created Subnet $ERT_SN_AZ2_ID named $ERT_SN_AZ2 in $SN_AZ2."
+ERT_SN_AZ2_ID=$(aws ec2 create-subnet \
+  --vpc-id $VPC_ID \
+  --cidr-block $ERT_SN_AZ2_CIDR \
+  --availability-zone $SN_AZ2 \
+  --region $REGION \
+  --query 'Subnet.{SubnetId:SubnetId}' \
+  --output text)
+aws ec2 create-tags \
+  --resources $ERT_SN_AZ2_ID \
+  --tags "Key=Name,Value=$ERT_SN_AZ2" \
+  --region $REGION
+echo "Successfully created Subnet $ERT_SN_AZ2 in $SN_AZ2."
 
-SVC_SN_AZ0_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $SVC_SN_AZ0_CIDR --availability-zone $SN_AZ0 --query 'Subnet.{SubnetId:SubnetId}' --output text --region $REGION)
-aws ec2 create-tags --resources $SVC_SN_AZ0_ID --tags "Key=Name,Value=$SVC_SN_AZ0" --region $REGION
-echo "Successfully created Subnet $SVC_SN_AZ0_ID named $SVC_SN_AZ0 in $SN_AZ0."
+SVC_SN_AZ0_ID=$(aws ec2 create-subnet \
+  --vpc-id $VPC_ID \
+  --cidr-block $SVC_SN_AZ0_CIDR \
+  --availability-zone $SN_AZ0 \
+  --region $REGION \
+  --query 'Subnet.{SubnetId:SubnetId}' \
+  --output text)
+aws ec2 create-tags \
+  --resources $SVC_SN_AZ0_ID \
+  --tags "Key=Name,Value=$SVC_SN_AZ0" \
+  --region $REGION
+echo "Successfully created Subnet $SVC_SN_AZ0 in $SN_AZ0."
 
-SVC_SN_AZ1_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $SVC_SN_AZ1_CIDR --availability-zone $SN_AZ1 --query 'Subnet.{SubnetId:SubnetId}' --output text --region $REGION)
-aws ec2 create-tags --resources $SVC_SN_AZ1_ID --tags "Key=Name,Value=$SVC_SN_AZ1" --region $REGION
-echo "Successfully created Subnet $SVC_SN_AZ1_ID named $SVC_SN_AZ1 in $SN_AZ1."
+SVC_SN_AZ1_ID=$(aws ec2 create-subnet \
+  --vpc-id $VPC_ID \
+  --cidr-block $SVC_SN_AZ1_CIDR \
+  --availability-zone $SN_AZ1 \
+  --region $REGION \
+  --query 'Subnet.{SubnetId:SubnetId}' \
+  --output text)
+aws ec2 create-tags \
+  --resources $SVC_SN_AZ1_ID \
+  --tags "Key=Name,Value=$SVC_SN_AZ1" \
+  --region $REGION
+echo "Successfully created Subnet $SVC_SN_AZ1 in $SN_AZ1."
 
-SVC_SN_AZ2_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $SVC_SN_AZ2_CIDR --availability-zone $SN_AZ2 --query 'Subnet.{SubnetId:SubnetId}' --output text --region $REGION)
-aws ec2 create-tags --resources $SVC_SN_AZ2_ID --tags "Key=Name,Value=$SVC_SN_AZ2" --region $REGION
-echo "Successfully created Subnet $SVC_SN_AZ2_ID named $SVC_SN_AZ2 in $SN_AZ2."
+SVC_SN_AZ2_ID=$(aws ec2 create-subnet \
+  --vpc-id $VPC_ID \
+  --cidr-block $SVC_SN_AZ2_CIDR \
+  --availability-zone $SN_AZ2 \
+  --region $REGION \
+  --query 'Subnet.{SubnetId:SubnetId}' \
+  --output text)
+aws ec2 create-tags \
+  --resources $SVC_SN_AZ2_ID \
+  --tags "Key=Name,Value=$SVC_SN_AZ2" \
+  --region $REGION
+echo "Successfully created Subnet $SVC_SN_AZ2 in $SN_AZ2."
 
-RDS_SN_AZ0_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $RDS_SN_AZ0_CIDR --availability-zone $SN_AZ0 --query 'Subnet.{SubnetId:SubnetId}' --output text --region $REGION)
-aws ec2 create-tags --resources $RDS_SN_AZ0_ID --tags "Key=Name,Value=$RDS_SN_AZ0" --region $REGION
-echo "Successfully created Subnet $RDS_SN_AZ0_ID named $RDS_SN_AZ0 in $SN_AZ0."
+RDS_SN_AZ0_ID=$(aws ec2 create-subnet \
+  --vpc-id $VPC_ID \
+  --cidr-block $RDS_SN_AZ0_CIDR \
+  --availability-zone $SN_AZ0 \
+  --region $REGION \
+  --query 'Subnet.{SubnetId:SubnetId}' \
+  --output text)
+aws ec2 create-tags \
+  --resources $RDS_SN_AZ0_ID \
+  --tags "Key=Name,Value=$RDS_SN_AZ0" \
+  --region $REGION
+echo "Successfully created Subnet $RDS_SN_AZ0 in $SN_AZ0."
 
-RDS_SN_AZ1_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $RDS_SN_AZ1_CIDR --availability-zone $SN_AZ1 --query 'Subnet.{SubnetId:SubnetId}' --output text --region $REGION)
-aws ec2 create-tags --resources $RDS_SN_AZ1_ID --tags "Key=Name,Value=$RDS_SN_AZ1" --region $REGION
-echo "Successfully created Subnet $RDS_SN_AZ1_ID named $RDS_SN_AZ1 in $SN_AZ1."
+RDS_SN_AZ1_ID=$(aws ec2 create-subnet \
+  --vpc-id $VPC_ID \
+  --cidr-block $RDS_SN_AZ1_CIDR \
+  --availability-zone $SN_AZ1 \
+  --region $REGION \
+  --query 'Subnet.{SubnetId:SubnetId}' \
+  --output text)
+aws ec2 create-tags \
+  --resources $RDS_SN_AZ1_ID \
+  --tags "Key=Name,Value=$RDS_SN_AZ1" \
+  --region $REGION
+echo "Successfully created Subnet $RDS_SN_AZ1 in $SN_AZ1."
 
-RDS_SN_AZ2_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $RDS_SN_AZ2_CIDR --availability-zone $SN_AZ2 --query 'Subnet.{SubnetId:SubnetId}' --output text --region $REGION)
-aws ec2 create-tags --resources $RDS_SN_AZ2_ID --tags "Key=Name,Value=$RDS_SN_AZ2" --region $REGION
-echo "Successfully created Subnet $RDS_SN_AZ2_ID named $RDS_SN_AZ2 in $SN_AZ2."
+RDS_SN_AZ2_ID=$(aws ec2 create-subnet \
+  --vpc-id $VPC_ID \
+  --cidr-block $RDS_SN_AZ2_CIDR \
+  --availability-zone $SN_AZ2 \
+  --region $REGION \
+  --query 'Subnet.{SubnetId:SubnetId}' \
+  --output text)
+aws ec2 create-tags \
+  --resources $RDS_SN_AZ2_ID \
+  --tags "Key=Name,Value=$RDS_SN_AZ2" \
+  --region $REGION
+echo "Successfully created Subnet $RDS_SN_AZ2 in $SN_AZ2."
 
 # Create and configure Security Group for Ops Manager
-OPSMAN_SG_ID=$(aws ec2 create-security-group --group-name $OPSMAN_SG --description "$OPSMAN_SG_DESC" --vpc-id $VPC_ID --query '{GroupId:GroupId}' --output text)
-aws ec2 authorize-security-group-ingress --group-id $OPSMAN_SG_ID --protocol tcp --port 80 --cidr $MY_CIDR
-aws ec2 authorize-security-group-ingress --group-id $OPSMAN_SG_ID --protocol tcp --port 443 --cidr $MY_CIDR
-aws ec2 authorize-security-group-ingress --group-id $OPSMAN_SG_ID --protocol tcp --port 22 --cidr $MY_CIDR
-aws ec2 authorize-security-group-ingress --group-id $OPSMAN_SG_ID --protocol tcp --port 6868 --cidr $VPC_CIDR
-aws ec2 authorize-security-group-ingress --group-id $OPSMAN_SG_ID --protocol tcp --port 25555 --cidr $VPC_CIDR
-echo "Successfully created and configured Security Group $OPSMAN_SG_ID named $OPSMAN_SG in $VPC_ID."
+OPSMAN_SG_ID=$(aws ec2 create-security-group \
+  --group-name $OPSMAN_SG \
+  --description "$OPSMAN_SG_DESC" \
+  --vpc-id $VPC_ID \
+  --query '{GroupId:GroupId}' \
+  --output text)
+aws ec2 authorize-security-group-ingress \
+  --group-id $OPSMAN_SG_ID \
+  --protocol tcp \
+  --port 80 \
+  --cidr $MY_CIDR
+aws ec2 authorize-security-group-ingress \
+  --group-id $OPSMAN_SG_ID \
+  --protocol tcp \
+  --port 443 \
+  --cidr $MY_CIDR
+aws ec2 authorize-security-group-ingress \
+  --group-id $OPSMAN_SG_ID \
+  --protocol tcp \
+  --port 22 \
+  --cidr $MY_CIDR
+aws ec2 authorize-security-group-ingress \
+  --group-id $OPSMAN_SG_ID \
+  --protocol tcp \
+  --port 6868 \
+  --cidr $VPC_CIDR
+aws ec2 authorize-security-group-ingress \
+  --group-id $OPSMAN_SG_ID \
+  --protocol tcp \
+  --port 25555 \
+  --cidr $VPC_CIDR
+echo "Successfully created and configured Security Group $OPSMAN_SG in $VPC_ID."
 
 # Create and configure Security Group for PCF VMS
-PCFVM_SG_ID=$(aws ec2 create-security-group --group-name $PCFVM_SG --description "$PCFVM_SG_DESC" --vpc-id $VPC_ID --query '{GroupId:GroupId}' --output text)
-aws ec2 authorize-security-group-ingress --group-id $PCFVM_SG_ID --protocol all --port -1 --cidr $VPC_CIDR
-echo "Successfully created and configured Security Group $PCFVM_SG_ID named $PCFVM_SG in $VPC_ID."
+PCFVM_SG_ID=$(aws ec2 create-security-group \
+  --group-name $PCFVM_SG \
+  --description "$PCFVM_SG_DESC" \
+  --vpc-id $VPC_ID \
+  --query '{GroupId:GroupId}' \
+  --output text)
+aws ec2 authorize-security-group-ingress \
+  --group-id $PCFVM_SG_ID \
+  --protocol all \
+  --port -1 \
+  --cidr $VPC_CIDR
+echo "Successfully created and configured Security Group $PCFVM_SG in $VPC_ID."
 
 # Create and configure Security Group for Web ELB
-WEBELB_SG_ID=$(aws ec2 create-security-group --group-name $WEBELB_SG --description "$WEBELB_SG_DESC" --vpc-id $VPC_ID --query '{GroupId:GroupId}' --output text)
-aws ec2 authorize-security-group-ingress --group-id $WEBELB_SG_ID --protocol tcp --port 4443 --cidr $ANY_CIDR
-aws ec2 authorize-security-group-ingress --group-id $WEBELB_SG_ID --protocol tcp --port 80 --cidr $ANY_CIDR
-aws ec2 authorize-security-group-ingress --group-id $WEBELB_SG_ID --protocol tcp --port 443 --cidr $ANY_CIDR
-echo "Successfully created and configured Security Group $WEBELB_SG_ID named $WEBELB_SG in $VPC_ID."
+WEBELB_SG_ID=$(aws ec2 create-security-group \
+  --group-name $WEBELB_SG \
+  --description "$WEBELB_SG_DESC" \
+  --vpc-id $VPC_ID \
+  --query '{GroupId:GroupId}' \
+  --output text)
+aws ec2 authorize-security-group-ingress \
+  --group-id $WEBELB_SG_ID \
+  --protocol tcp \
+  --port 4443 \
+  --cidr $ANY_CIDR
+aws ec2 authorize-security-group-ingress \
+  --group-id $WEBELB_SG_ID \
+  --protocol tcp \
+  --port 80 \
+  --cidr $ANY_CIDR
+aws ec2 authorize-security-group-ingress \
+  --group-id $WEBELB_SG_ID \
+  --protocol tcp \
+  --port 443 \
+  --cidr $ANY_CIDR
+echo "Successfully created and configured Security Group $WEBELB_SG in $VPC_ID."
 
 # Create and configure Security Group for SSH ELB
-SSHELB_SG_ID=$(aws ec2 create-security-group --group-name $SSHELB_SG --description "$SSHELB_SG_DESC" --vpc-id $VPC_ID --query '{GroupId:GroupId}' --output text)
-aws ec2 authorize-security-group-ingress --group-id $SSHELB_SG_ID --protocol tcp --port 2222 --cidr $ANY_CIDR
-echo "Successfully created and configured Security Group $SSHELB_SG_ID named $SSHELB_SG in $VPC_ID."
+SSHELB_SG_ID=$(aws ec2 create-security-group \
+  --group-name $SSHELB_SG \
+  --description "$SSHELB_SG_DESC" \
+  --vpc-id $VPC_ID \
+  --query '{GroupId:GroupId}' \
+  --output text)
+aws ec2 authorize-security-group-ingress \
+  --group-id $SSHELB_SG_ID \
+  --protocol tcp \
+  --port 2222 \
+  --cidr $ANY_CIDR
+echo "Successfully created and configured Security Group $SSHELB_SG in $VPC_ID."
 
 # Create and configure Security Group for TCP ELB
-TCPELB_SG_ID=$(aws ec2 create-security-group --group-name $TCPELB_SG --description "$TCPELB_SG_DESC" --vpc-id $VPC_ID --query '{GroupId:GroupId}' --output text)
-aws ec2 authorize-security-group-ingress --group-id $TCPELB_SG_ID --protocol tcp --port 1024-1123 --cidr $ANY_CIDR
-echo "Successfully created and configured Security Group $TCPELB_SG_ID named $TCPELB_SG in $VPC_ID."
+TCPELB_SG_ID=$(aws ec2 create-security-group \
+  --group-name $TCPELB_SG \
+  --description "$TCPELB_SG_DESC" \
+  --vpc-id $VPC_ID \
+  --query '{GroupId:GroupId}' \
+  --output text)
+aws ec2 authorize-security-group-ingress \
+  --group-id $TCPELB_SG_ID \
+  --protocol tcp \
+  --port 1024-1123 \
+  --cidr $ANY_CIDR
+echo "Successfully created and configured Security Group $TCPELB_SG in $VPC_ID."
 
 # Create and configure Security Group for Outbound NAT
-OBDNAT_SG_ID=$(aws ec2 create-security-group --group-name $OBDNAT_SG --description "$OBDNAT_SG_DESC" --vpc-id $VPC_ID --query '{GroupId:GroupId}' --output text)
-aws ec2 authorize-security-group-ingress --group-id $OBDNAT_SG_ID --protocol all --port -1 --cidr $VPC_CIDR
-echo "Successfully created and configured Security Group $OBDNAT_SG_ID named $OBDNAT_SG in $VPC_ID."
+OBDNAT_SG_ID=$(aws ec2 create-security-group \
+  --group-name $OBDNAT_SG \
+  --description "$OBDNAT_SG_DESC" \
+  --vpc-id $VPC_ID \
+  --query '{GroupId:GroupId}' \
+  --output text)
+aws ec2 authorize-security-group-ingress \
+  --group-id $OBDNAT_SG_ID \
+  --protocol all \
+  --port -1 \
+  --cidr $VPC_CIDR
+echo "Successfully created and configured Security Group $OBDNAT_SG in $VPC_ID."
 
 # Create and configure Security Group for MySQL
-MYSQL_SG_ID=$(aws ec2 create-security-group --group-name $MYSQL_SG --description "$MYSQL_SG_DESC" --vpc-id $VPC_ID --query '{GroupId:GroupId}' --output text)
-aws ec2 authorize-security-group-ingress --group-id $MYSQL_SG_ID --protocol tcp --port 3306 --cidr $VPC_CIDR
-aws ec2 authorize-security-group-egress --group-id $MYSQL_SG_ID --protocol all --port -1 --cidr $VPC_CIDR
-echo "Successfully created and configured Security Group $MYSQL_SG_ID named $MYSQL_SG in $VPC_ID."
+MYSQL_SG_ID=$(aws ec2 create-security-group \
+  --group-name $MYSQL_SG \
+  --description "$MYSQL_SG_DESC" \
+  --vpc-id $VPC_ID \
+  --query '{GroupId:GroupId}' \
+  --output text)
+aws ec2 authorize-security-group-ingress \
+  --group-id $MYSQL_SG_ID \
+  --protocol tcp \
+  --port 3306 \
+  --cidr $VPC_CIDR
+aws ec2 authorize-security-group-egress \
+  --group-id $MYSQL_SG_ID \
+  --protocol all \
+  --port -1 \
+  --cidr $VPC_CIDR
+echo "Successfully created and configured Security Group $MYSQL_SG in $VPC_ID."
 
 # Create Ops Manager Instance
-echo "CREATING OPSMAN INSTANCE"
-OPSMAN_INSTANCE_ID=$(aws ec2 run-instances --image-id $OPSMAN_AMI --count 1 --instance-type $OPSMAN_INSTANCE_TYPE --key-name $KEY_OPS_MAN --subnet-id $PUB_SN_AZ0_ID \
-  --iam-instance-profile Name=$IAM_PROFILE --security-group-ids $OPSMAN_SG_ID --block-device-mapping /dev/sda1=:100:false --query 'Instances[].{InstanceId:InstanceId}' --output text)
+OPSMAN_INSTANCE_ID=$(aws ec2 run-instances \
+  --image-id $OPSMAN_AMI \
+  --count 1 \
+  --instance-type $OPSMAN_INSTANCE_TYPE \
+  --key-name $KEY_OPS_MAN \
+  --subnet-id $PUB_SN_AZ0_ID \
+  --iam-instance-profile Name=$IAM_PROFILE \
+  --security-group-ids $OPSMAN_SG_ID \
+  --block-device-mapping file://pcf-opsman-block-device-mapping.json \
+  --query 'Instances[].{InstanceId:InstanceId}' \
+  --output text)
 SECONDS=0
 LAST_CHECK=0
 STATE=""
 until [[ "$STATE" == *RUNNING ]]; do
   INTERVAL=$SECONDS-$LAST_CHECK
   if [[ $INTERVAL -ge $CHECK_FREQUENCY ]]; then
-    STATE=$(aws ec2 describe-instances --instance-ids $OPSMAN_INSTANCE_ID --query 'Reservations[].Instances[].{State:State}'  --output text --region $REGION)
+    STATE=$(aws ec2 describe-instances \
+      --instance-ids $OPSMAN_INSTANCE_ID \
+      --query 'Reservations[].Instances[].{State:State}' \
+      --output text \
+      --region $REGION)
     STATE=$(echo $STATE | tr '[:lower:]' '[:upper:]')
     LAST_CHECK=$SECONDS
   fi
@@ -369,41 +686,100 @@ until [[ "$STATE" == *RUNNING ]]; do
   printf "    $STATUS_MSG\033[0K\r"
   sleep 1
 done
-aws ec2 create-tags --resources $OPSMAN_INSTANCE_ID --tags "Key=Name,Value=$OPSMAN_INSTANCE" --region $REGION
-echo "Successfully created Ops Manager Instance $OPSMAN_INSTANCE_ID named $OPSMAN_INSTANCE."
+aws ec2 create-tags \
+  --resources $OPSMAN_INSTANCE_ID \
+  --tags "Key=Name,Value=$OPSMAN_INSTANCE" \
+  --region $REGION
+echo "Successfully created Ops Manager Instance $OPSMAN_INSTANCE."
 
 # Create certificate
+# TODO?
 
 # Create Web Load Balancer
-WEB_ELB_DNS=$(aws elb create-load-balancer --load-balancer-name $WEB_ELB --listeners "$WEB_ELB_L0" "$WEB_ELB_L1" "$WEB_ELB_L2" --scheme internal --subnets $PUB_SN_AZ0_ID $PUB_SN_AZ1_ID $PUB_SN_AZ2_ID --security-groups $WEBELB_SG_ID --query '{DNSName:DNSName}' --output text)
-aws elb configure-health-check --load-balancer-name $WEB_ELB --health-check Target=HTTP:8080/health,Interval=5,UnhealthyThreshold=3,HealthyThreshold=6,Timeout=3
+WEB_ELB_DNS=$(aws elb create-load-balancer \
+  --load-balancer-name $WEB_ELB \
+  --listeners $WEB_ELB_L0 $WEB_ELB_L1 $WEB_ELB_L2 \
+  --scheme internal \
+  --subnets $PUB_SN_AZ0_ID $PUB_SN_AZ1_ID $PUB_SN_AZ2_ID \
+  --security-groups $WEBELB_SG_ID \
+  --query '{DNSName:DNSName}' \
+  --output text)
+aws elb configure-health-check \
+  --load-balancer-name $WEB_ELB \
+  --health-check Target=HTTP:8080/health,Interval=5,UnhealthyThreshold=3,HealthyThreshold=6,Timeout=3
 echo "Successfully created Web ELB $WEB_ELB at $WEB_ELB_DNS"
 
 # Create SSH Load Balancer
-SSH_ELB_DNS=$(aws elb create-load-balancer --load-balancer-name $SSH_ELB --listeners "$SSH_ELB_L0" --scheme internal --subnets $PUB_SN_AZ0_ID $PUB_SN_AZ1_ID $PUB_SN_AZ2_ID --security-groups $WEBELB_SG_ID --query '{DNSName:DNSName}' --output text)
-aws elb configure-health-check --load-balancer-name $SSH_ELB --health-check Target=TCP:2222,Interval=5,UnhealthyThreshold=3,HealthyThreshold=6,Timeout=3
+SSH_ELB_DNS=$(aws elb create-load-balancer \
+  --load-balancer-name $SSH_ELB \
+  --listeners $SSH_ELB_L0 \
+  --scheme internal \
+  --subnets $PUB_SN_AZ0_ID $PUB_SN_AZ1_ID $PUB_SN_AZ2_ID \
+  --security-groups $WEBELB_SG_ID \
+  --query '{DNSName:DNSName}' \
+  --output text)
+aws elb configure-health-check \
+  --load-balancer-name $SSH_ELB \
+  --health-check Target=TCP:2222,Interval=5,UnhealthyThreshold=3,HealthyThreshold=6,Timeout=3
 echo "Successfully created SSH ELB $SSH_ELB at $SSH_ELB_DNS"
 
 # Create TCP Load Balancer
-TCP_ELB_DNS=$(aws elb create-load-balancer --load-balancer-name $TCP_ELB --listeners "$TCP_ELB_L0" --scheme internal --subnets $PUB_SN_AZ0_ID $PUB_SN_AZ1_ID $PUB_SN_AZ2_ID --security-groups $TCPELB_SG_ID --query '{DNSName:DNSName}' --output text)
-aws elb configure-health-check --load-balancer-name $TCP_ELB --health-check Target=TCP:80,Interval=5,UnhealthyThreshold=3,HealthyThreshold=6,Timeout=3
+TCP_ELB_DNS=$(aws elb create-load-balancer \
+  --load-balancer-name $TCP_ELB \
+  --listeners "$TCP_ELB_L0" \
+  --scheme internal \
+  --subnets $PUB_SN_AZ0_ID $PUB_SN_AZ1_ID $PUB_SN_AZ2_ID \
+  --security-groups $TCPELB_SG_ID \
+  --query '{DNSName:DNSName}' \
+  --output text)
+aws elb configure-health-check \
+  --load-balancer-name $TCP_ELB \
+  --health-check Target=TCP:80,Interval=5,UnhealthyThreshold=3,HealthyThreshold=6,Timeout=3
 echo "Successfully created TCP ELB $TCP_ELB at $TCP_ELB_DNS"
 
 # Update CNAME and A records
-OPSMAN_IP=$(aws ec2 describe-instances --instance-ids $OPSMAN_INSTANCE_ID --query 'Reservations[].Instances[].{PublicIpAddress:PublicIpAddress}' --output text)
+OPSMAN_IP=$(aws ec2 describe-instances \
+  --instance-ids $OPSMAN_INSTANCE_ID \
+  --query 'Reservations[].Instances[].{PublicIpAddress:PublicIpAddress}' \
+  --output text)
 sed -e "s+APP_DOMAIN+$APP_DOMAIN+g" -e "s+WEB_ELB+$WEB_ELB_DNS+g" \
   -e "s+SYS_DOMAIN+$SYS_DOMAIN+g" \
   -e "s+SSH_DOMAIN+$SSH_DOMAIN+g" -e "s+SSH_ELB+$SSH_ELB_DNS+g" \
   -e "s+TCP_DOMAIN+$TCP_DOMAIN+g" -e "s+TCP_ELB+$TCP_ELB_DNS+g" \
   -e "s+PCF_DOMAIN+$PCF_DOMAIN+g" -e "s+OPSMAN_IP+$OPSMAN_IP+g" \
   $ZONE_UPDATE_TEMPLATE > $ZONE_UPDATE_JSON
-aws route53 change-resource-record-sets --hosted-zone-id $ZONE_ID --change-batch file://$ZONE_UPDATE_JSON
+aws route53 change-resource-record-sets \
+  --hosted-zone-id $ZONE_ID \
+  --change-batch file://$ZONE_UPDATE_JSON
 echo "Successfully updated CNAME and A records"
 
 # Update NAT EC2 Instance Security Group
-aws ec2 modify-instance-attribute --instance-id $NAT_INSTANCE_ID --groups $OBDNAT_SG_ID
-echo "Successfully updated NAT instance $NAT_INSTANCE_ID security group to $OBDNAT_SG_ID"
+aws ec2 modify-instance-attribute \
+  --instance-id $NAT_INSTANCE_ID \
+  --groups $OBDNAT_SG_ID
+echo "Successfully updated NAT instance $NAT_INSTANCE security group to $OBDNAT_SG"
 
+# Create RDS Subnet Group
+aws rds create-db-subnet-group \
+  --db-subnet-group-name $RDS_SN_GRP \
+  --db-subnet-group-description "$RDS_SN_GRP_DESC" \
+  --subnet-ids $RDS_SN_AZ0_ID $RDS_SN_AZ1_ID $RDS_SN_AZ2_ID
+echo "Successfully created RDS Subnet Group"
+
+# Create RDS Instance
+aws rds create-db-instance \
+  --allocated-storage 100 \
+  --storage-type gp2 \
+  --db-instance-class $RDS_CLASS \
+  --db-instance-identifier $RDS_ID \
+  --engine mysql \
+  --db-subnet-group-name $RDS_SN_GRP \
+  --no-publicly-accessible \
+  --vpc-security-group-ids $MYSQL_SG_ID \
+  --db-name $RDS_NAME \
+  --master-username admin \
+  --master-user-password password
+echo "Successfully created RDS Instance"
 
 echo "COMPLETED"
 exit 0

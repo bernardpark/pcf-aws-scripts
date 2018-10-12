@@ -1,7 +1,11 @@
 [
   {
-    "DeviceName": "/dev/sdh",
+    "DeviceName": "/dev/xvda",
     "Ebs": {
+      "DeleteOnTermination": true,
+      "Iops": 150,
+      "VolumeType": "gp2",
+      "Encrypted": false,
       "VolumeSize": 100
     }
   }
