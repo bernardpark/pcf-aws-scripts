@@ -1,5 +1,5 @@
 {
-  "Comment": "Create CNAME and A records for PCF Ops Manager Hosted Zone",
+  "Comment": "Create CNAME and A records for PCF Hosted Zone",
   "Changes": [
     {
       "Action": "CREATE",
@@ -48,7 +48,7 @@
         "TTL": 300,
         "ResourceRecords": [
           {
-            "Value": "SSH_ELB"
+            "Value": "TCP_ELB"
           }
         ]
       }

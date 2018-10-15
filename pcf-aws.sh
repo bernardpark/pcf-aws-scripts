@@ -31,6 +31,8 @@ IAM_ROLE_POLICY="pcf-iam-role-trust-policy"
 
 IAM_PROFILE="pcf-profile"
 
+KEY_PAIR_PEM="pcf-key-pair.pem"
+
 # VPC, Initial Subnets, Internet Gateway, Route Tables, Elastic IP, NAT
 VPC="pcf-vpc"
 VPC_CIDR="10.0.0.0/16"
@@ -300,8 +302,9 @@ aws ec2 modify-subnet-attribute \
 echo "Successfully enabled 'Auto-assign Public IP' on Subnet $PUB_SN_AZ0."
 
 # Create EC2 Key Pair
-KEY_OPS_MAN_ID=$(aws ec2 create-key-pair \
-  --key-name $KEY_OPS_MAN)
+aws ec2 create-key-pair \
+  --key-name $KEY_OPS_MAN \
+  > $KEY_PAIR_PEM
 echo "Successfully created ec2 key pair $KEY_OPS_MAN"
 
 # Create NAT Instance
@@ -376,7 +379,10 @@ PUB_SN_AZ2_ID=$(aws ec2 create-subnet \
   --region $REGION \
   --query 'Subnet.{SubnetId:SubnetId}' \
   --output text)
-aws ec2 create-tags --resources $PUB_SN_AZ2_ID --tags "Key=Name,Value=$PUB_SN_AZ2" --region $REGION
+aws ec2 create-tags \
+  --resources $PUB_SN_AZ2_ID \
+  --tags "Key=Name,Value=$PUB_SN_AZ2" \
+  --region $REGION
 echo "Successfully created Subnet $PUB_SN_AZ2 in $SN_AZ2."
 
 PRI_SN_AZ1_ID=$(aws ec2 create-subnet \
