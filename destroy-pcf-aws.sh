@@ -365,13 +365,6 @@ elb_cleanup()
 # Delete CNAME and A records
 r53_cleanup()
 {
-  sed -e "s+APP_DOMAIN+$APP_DOMAIN+g" -e "s+WEB_ELB+$WEB_ELB_DNS+g" \
-    -e "s+SYS_DOMAIN+$SYS_DOMAIN+g" \
-    -e "s+SSH_DOMAIN+$SSH_DOMAIN+g" -e "s+SSH_ELB+$SSH_ELB_DNS+g" \
-    -e "s+TCP_DOMAIN+$TCP_DOMAIN+g" -e "s+TCP_ELB+$TCP_ELB_DNS+g" \
-    -e "s+PCF_DOMAIN+$PCF_DOMAIN+g" -e "s+OPSMAN_IP+$OPSMAN_IP+g" \
-    -e "s+CREATE+DELETE+g" \
-    $ZONE_UPDATE_TEMPLATE > $ZONE_UPDATE_JSON
   aws route53 change-resource-record-sets --hosted-zone-id $ZONE_ID --change-batch file://$ZONE_UPDATE_JSON
   echo "Successfully deleted CNAME and A records"
 }

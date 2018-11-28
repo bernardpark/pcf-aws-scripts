@@ -111,6 +111,7 @@ MYSQL_SG_DESC="Security Group for MySQL"
 
 # EC2
 KEY_OPS_MAN="pcf-ops-manager-key"
+KEY_OPS_MAN_PEM="opsman-key.pem"
 
 NAT_INSTANCE="pcf-nat"
 NAT_INSTANCE_TYPE="t2.medium"
@@ -144,7 +145,7 @@ ZONE_UPDATE_JSON="pcf-zone-records.json"
 
 APP_DOMAIN="apps.$ZONE_DOMAIN"
 SYS_DOMAIN="system.$ZONE_DOMAIN"
-SSH_DOMAIN="ssh.$ZONE_DOMAIN"
+SSH_DOMAIN="ssh.system.$ZONE_DOMAIN"
 TCP_DOMAIN="tcp.$ZONE_DOMAIN"
 PCF_DOMAIN="pcf.$ZONE_DOMAIN"
 
@@ -300,8 +301,9 @@ aws ec2 modify-subnet-attribute \
 echo "Successfully enabled 'Auto-assign Public IP' on Subnet $PUB_SN_AZ0."
 
 # Create EC2 Key Pair
-KEY_OPS_MAN_ID=$(aws ec2 create-key-pair \
-  --key-name $KEY_OPS_MAN)
+aws ec2 create-key-pair \
+  --key-name $KEY_OPS_MAN \
+  > $KEY_OPS_MAN_PEM
 echo "Successfully created ec2 key pair $KEY_OPS_MAN"
 
 # Create NAT Instance
@@ -753,7 +755,7 @@ aws route53 change-resource-record-sets \
   --change-batch file://$ZONE_UPDATE_JSON
 echo "Successfully updated CNAME and A records"
 
-# Update NAT EC2 Instance Security Group
+# Update NAT EC2 Instance Secur/ity Group
 aws ec2 modify-instance-attribute \
   --instance-id $NAT_INSTANCE_ID \
   --groups $OBDNAT_SG_ID
@@ -780,6 +782,11 @@ aws rds create-db-instance \
   --master-username admin \
   --master-user-password password
 echo "Successfully created RDS Instance"
+
+# Create root cert for Bosh deployed VMs
+openssl req -newkey rsa:2048 -nodes -keyout key.pem -x509 -days 365 -out certificate.pem
+
+
 
 echo "COMPLETED"
 exit 0
