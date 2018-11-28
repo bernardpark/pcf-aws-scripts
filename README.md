@@ -18,7 +18,7 @@ Your AWS account requires that it can launch more than 20 instances. Navigate to
 
 ### Acquire a Domain and Certificate
 
-If you use Route53, create a Hosted Zone and acquire a domain. An example of such would be *.pearsonpcf.com. If you use an external provider, make sure you have a domain dedicated to this PCF foundation and have access to modify CNAME and A records.
+If you use Route53, create a Hosted Zone and acquire a domain. An example of such would be *.bernardparkpcf.com. If you use an external provider, make sure you have a domain dedicated to this PCF foundation and have access to modify CNAME and A records.
 
 ### Install AWS CLI
 
