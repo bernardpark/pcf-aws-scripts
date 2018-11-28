@@ -80,5 +80,5 @@ The destroy script is designed to clean up your environment in the reverse order
 
 ## Authors
 
-* **Bernard Park** - [Github Repo](https://github.com/bernardpark)
+* **Bernard Park** - [Github](https://github.com/bernardpark)
 
