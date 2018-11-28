@@ -11,14 +11,51 @@
 #   Modify variables below as needed
 #==============================================================================
 
+echo "*********************************************************************************************************"
+echo "*** THIS SCRIPT WILL CONFIGURE AND USE YOUR AWS CLI. BEFORE YOU BEGIN MAKE SURE THIS SCRIPT IS SECURE ***"
+echo "************************************ REQUIRES aws cli AND jq ********************************************"
+echo "*********************************************************************************************************"
+echo ""
+
 # Misc. Variables
 RESULT=""
 
 # AWS Region. Make sure this matches the region you configure with 'aws configure'
-REGION="us-east-2"
+echo -n "AWS Region [us-east-2] > "
+read UINPUT
+if [ -z "$UINPUT" ]; then
+    UINPUT="us-east-2"
+fi
+REGION=$UINPUT
 
 # S3 Buckets. Make sure these are unique.
-declare -a BUCKETS=("bpark-pcf-ops-manager-bucket" "bpark-pcf-buildpacks-bucket" "bpark-pcf-packages-bucket" "bpark-pcf-resources-bucket" "bpark-pcf-droplets-bucket")
+declare -a BUCKETS=()
+echo -n "Ops Manager Bucket Name [bpark-pcf-ops-manager-bucket] > "
+read UINPUT1
+if [ -z "$UINPUT1" ]; then
+    UINPUT1="bpark-pcf-ops-manager-bucket"
+fi
+echo -n "Buildpacks Bucket Name [bpark-pcf-buildpacks-bucket] > "
+read UINPUT2
+if [ -z "$UINPUT2" ]; then
+    UINPUT2="bpark-pcf-buildpacks-bucket"
+fi
+echo -n "Packages Bucket Name [bpark-pcf-packages-bucket] > "
+read UINPUT3
+if [ -z "$UINPUT3" ]; then
+    UINPUT3="bpark-pcf-packages-bucket"
+fi
+echo -n "Resources Bucket Name [bpark-pcf-resources-bucket] > "
+read UINPUT4
+if [ -z "$UINPUT4" ]; then
+    UINPUT4="bpark-pcf-resources-bucket"
+fi
+echo -n "Droplets Bucket Name [bpark-pcf-droplets-bucket] > "
+read UINPUT5
+if [ -z "$UINPUT5" ]; then
+    UINPUT5="bpark-pcf-droplets-bucket"
+fi
+declare -a BUCKETS=($UINPUT1 $UINPUT2 $UINPUT3 $UINPUT4 $UINPUT5)
 
 # IAM
 IAM_USER="pcf-user"
@@ -120,11 +157,26 @@ NAT_INSTANCE_TYPE="t2.medium"
 NAT_AMI="ami-bd6f59d8"
 
 OPSMAN_INSTANCE="pcf-ops-manager"
-OPSMAN_INSTANCE_TYPE="m5.large"
-OPSMAN_AMI="ami-0af8611563c4da56c"
+echo -n "Ops Manager EC2 Instance Type [m5.large] > "
+read UINPUT
+if [ -z "$UINPUT" ]; then
+    UINPUT="m5.large"
+fi
+OPSMAN_INSTANCE_TYPE=$UINPUT
+echo -n "Ops Manager AMI [ami-0af8611563c4da56c] > "
+read UINPUT
+if [ -z "$UINPUT" ]; then
+    UINPUT="ami-0af8611563c4da56c"
+fi
+OPSMAN_AMI=$UINPUT
 
 # Certificates
-SSL_CERT_ARN="arn:aws:acm:us-east-2:008788954475:certificate/aceed5fc-98a9-4f89-8dfe-7aa06219695f"
+echo -n "SSL Certificate ARN [] > "
+read UINPUT
+if [ -z "$UINPUT" ]; then
+    UINPUT="arn:aws:acm:us-east-2:008788954475:certificate/aceed5fc-98a9-4f89-8dfe-7aa06219695f"
+fi
+SSL_CERT_ARN=$UINPUT
 
 # Load Balancers
 WEB_ELB="pcf-web-elb"
@@ -139,8 +191,18 @@ TCP_ELB="pcf-tcp-elb"
 TCP_ELB_L0="Protocol=TCP,LoadBalancerPort=1024,InstanceProtocol=TCP,InstancePort=1024"
 
 # Route53
-ZONE_ID="Z3ISWYVRXCVRDH"
-ZONE_DOMAIN="pcfbpark.com"
+echo -n "Route53 Zone ID [Z3ISWYVRXCVRDH] > "
+read UINPUT
+if [ -z "$UINPUT" ]; then
+    UINPUT="Z3ISWYVRXCVRDH"
+fi
+ZONE_ID=$UINPUT
+echo -n "Route53 Domain [pcfbpark.com] > "
+read UINPUT
+if [ -z "$UINPUT" ]; then
+    UINPUT="pcfbpark.com"
+fi
+ZONE_DOMAIN=$UINPUT
 
 ZONE_UPDATE_TEMPLATE="pcf-zone-records-template.json"
 ZONE_UPDATE_JSON="pcf-zone-records.json"
@@ -162,15 +224,19 @@ RDS_NAME="bosh"
 #   Installation script below. Do not modify.
 #==============================================================================
 
-echo "*********************************************************************************************************"
-echo "*** THIS SCRIPT WILL CONFIGURE AND USE YOUR AWS CLI. BEFORE YOU BEGIN MAKE SURE THIS SCRIPT IS SECURE ***"
-echo "************************************ REQUIRES aws cli AND jw ********************************************"
-echo "*********************************************************************************************************"
-echo ""
-
 # Configure AWS CLI (interactive)
 aws configure
 echo ""
+echo "*********************************************************************************************************"
+echo "**************************** THIS SCRIPT WILL NOW MODIFY YOUR AWS RESOURCES *****************************"
+echo "*********************************************************************************************************"
+echo ""
+
+echo -n "Are you sure you want to continue? [yN]"
+read UINPUT
+if [ -z "$UINPUT" ]; then
+    exit 0
+fi
 
 # Create S3 Buckets
 echo "Creating S3 Buckets"
