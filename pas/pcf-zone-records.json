@@ -1,0 +1,70 @@
+{
+  "Comment": "Create CNAME and A records for PCF Hosted Zone",
+  "Changes": [
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "apps.pcfbpark.com",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "internal-pcf-web-elb-988767067.us-east-2.elb.amazonaws.com"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "system.pcfbpark.com",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "internal-pcf-web-elb-988767067.us-east-2.elb.amazonaws.com"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "ssh.system.pcfbpark.com",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "internal-pcf-ssh-elb-1718534147.us-east-2.elb.amazonaws.com"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "tcp.pcfbpark.com",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "internal-pcf-tcp-elb-1301301131.us-east-2.elb.amazonaws.com"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "pcf.pcfbpark.com",
+        "Type": "A",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "18.219.233.70"
+          }
+        ]
+      }
+    }
+  ]
+}
