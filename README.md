@@ -1,4 +1,4 @@
-# Setting up PCF Reference Architecture on AWS using CLI
+# Setting up PCF (PAS) Reference Architecture on AWS using CLI
 
 This repository contains a rudimentary shell script to implement PCF on AWS Reference Architecture, as well as tearing it down. It is not meant for production use, but rather a learning experience.
 

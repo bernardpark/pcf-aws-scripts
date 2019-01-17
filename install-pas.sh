@@ -1,10 +1,10 @@
 #!/bin/bash
 #******************************************************************************
-#    AWS PCF Installation Script
+#    AWS PAS Installation Script
 #******************************************************************************i
 #
 # DESCRIPTION
-#    Automates PCF Installation on AWS using the AWS CLI.
+#    Automates PAS Installation on AWS using the AWS CLI.
 #
 #
 #==============================================================================
@@ -27,35 +27,6 @@ if [ -z "$UINPUT" ]; then
     UINPUT="us-east-2"
 fi
 REGION=$UINPUT
-
-# S3 Buckets. Make sure these are unique.
-declare -a BUCKETS=()
-echo -n "Ops Manager Bucket Name [bpark-pcf-ops-manager-bucket] > "
-read UINPUT1
-if [ -z "$UINPUT1" ]; then
-    UINPUT1="bpark-pcf-ops-manager-bucket"
-fi
-echo -n "Buildpacks Bucket Name [bpark-pcf-buildpacks-bucket] > "
-read UINPUT2
-if [ -z "$UINPUT2" ]; then
-    UINPUT2="bpark-pcf-buildpacks-bucket"
-fi
-echo -n "Packages Bucket Name [bpark-pcf-packages-bucket] > "
-read UINPUT3
-if [ -z "$UINPUT3" ]; then
-    UINPUT3="bpark-pcf-packages-bucket"
-fi
-echo -n "Resources Bucket Name [bpark-pcf-resources-bucket] > "
-read UINPUT4
-if [ -z "$UINPUT4" ]; then
-    UINPUT4="bpark-pcf-resources-bucket"
-fi
-echo -n "Droplets Bucket Name [bpark-pcf-droplets-bucket] > "
-read UINPUT5
-if [ -z "$UINPUT5" ]; then
-    UINPUT5="bpark-pcf-droplets-bucket"
-fi
-declare -a BUCKETS=($UINPUT1 $UINPUT2 $UINPUT3 $UINPUT4 $UINPUT5)
 
 # IAM
 IAM_USER="pcf-user"
@@ -163,10 +134,10 @@ if [ -z "$UINPUT" ]; then
     UINPUT="m5.large"
 fi
 OPSMAN_INSTANCE_TYPE=$UINPUT
-echo -n "Ops Manager AMI [ami-0af8611563c4da56c] > "
+echo -n "Ops Manager AMI [ami-0d37aa53a96ce792e] > "
 read UINPUT
 if [ -z "$UINPUT" ]; then
-    UINPUT="ami-0af8611563c4da56c"
+    UINPUT="ami-0d37aa53a96ce792e"
 fi
 OPSMAN_AMI=$UINPUT
 
@@ -207,9 +178,9 @@ ZONE_DOMAIN=$UINPUT
 ZONE_UPDATE_TEMPLATE="pcf-zone-records-template.json"
 ZONE_UPDATE_JSON="pcf-zone-records.json"
 
-APP_DOMAIN="apps.$ZONE_DOMAIN"
-SYS_DOMAIN="system.$ZONE_DOMAIN"
-SSH_DOMAIN="ssh.system.$ZONE_DOMAIN"
+APP_DOMAIN="*.apps.$ZONE_DOMAIN"
+SYS_DOMAIN="*.sys.$ZONE_DOMAIN"
+SSH_DOMAIN="ssh.sys.$ZONE_DOMAIN"
 TCP_DOMAIN="tcp.$ZONE_DOMAIN"
 PCF_DOMAIN="pcf.$ZONE_DOMAIN"
 
@@ -237,17 +208,6 @@ read UINPUT
 if [ -z "$UINPUT" ]; then
     exit 0
 fi
-
-# Create S3 Buckets
-echo "Creating S3 Buckets"
-for BUCKET in "${BUCKETS[@]}"
-do
-  aws s3api create-bucket \
-    --bucket $BUCKET \
-    --region $REGION \
-    --create-bucket-configuration LocationConstraint=$REGION
-  echo "Successfully created $BUCKET in $REGION."
-done
 
 # Create IAM user
 aws iam create-user \
@@ -832,32 +792,21 @@ aws ec2 modify-instance-attribute \
   --groups $OBDNAT_SG_ID
 echo "Successfully updated NAT instance $NAT_INSTANCE security group to $OBDNAT_SG"
 
-# Create RDS Subnet Group
-aws rds create-db-subnet-group \
-  --db-subnet-group-name $RDS_SN_GRP \
-  --db-subnet-group-description "$RDS_SN_GRP_DESC" \
-  --subnet-ids $RDS_SN_AZ0_ID $RDS_SN_AZ1_ID $RDS_SN_AZ2_ID
-echo "Successfully created RDS Subnet Group"
-
-# Create RDS Instance
-aws rds create-db-instance \
-  --allocated-storage 100 \
-  --storage-type gp2 \
-  --db-instance-class $RDS_CLASS \
-  --db-instance-identifier $RDS_ID \
-  --engine mysql \
-  --db-subnet-group-name $RDS_SN_GRP \
-  --no-publicly-accessible \
-  --vpc-security-group-ids $MYSQL_SG_ID \
-  --db-name $RDS_NAME \
-  --master-username admin \
-  --master-user-password password
-echo "Successfully created RDS Instance"
-
 # Create root cert for Bosh deployed VMs
 openssl req -newkey rsa:2048 -nodes -keyout key.pem -x509 -days 365 -out certificate.pem
 
+echo ""
+echo -n "*********************************** Continue configuration for (Y/n)? ***********************************"
+read UINPUT
 
+if [ -z "$UINPUT" ]; then
+    ./install-services.sh
+fi
 
-echo "COMPLETED"
+echo ""
+echo "********************************************** COMPLETED ************************************************"
+echo "*********************************************************************************************************"
+echo ""
+echo ""
+
 exit 0

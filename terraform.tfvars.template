@@ -1,0 +1,16 @@
+env_name           = "pks"
+access_key         = IAM_USR_ACC_KEY
+secret_key         = IAM_USR_SCR_KEY
+region             = "RGN"
+availability_zones = ["RGNa", "RGNb", "RGNc"]
+ops_manager_ami    = "OPS_MGR_AMI"
+dns_suffix         = "DNS_SFX"
+rds_instance_count = 1
+
+ssl_cert = <<EOT
+CRT_CSR_BDY
+EOT
+
+ssl_private_key = <<EOT
+CRT_PEM_BDY
+EOT
